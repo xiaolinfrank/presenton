@@ -35,6 +35,8 @@ class UserConfig(BaseModel):
     GOOGLE_IMAGE_MODEL: Optional[str] = None
     OPENAI_IMAGE_URL: Optional[str] = None
     GOOGLE_IMAGE_URL: Optional[str] = None
+    OPENAI_IMAGE_API_KEY: Optional[str] = None
+    GOOGLE_IMAGE_API_KEY: Optional[str] = None
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
 

@@ -81,6 +81,14 @@ def get_google_image_url_env():
     return os.getenv("GOOGLE_IMAGE_URL")
 
 
+def get_openai_image_api_key_env():
+    return os.getenv("OPENAI_IMAGE_API_KEY")
+
+
+def get_google_image_api_key_env():
+    return os.getenv("GOOGLE_IMAGE_API_KEY")
+
+
 def get_custom_llm_api_key_env():
     return os.getenv("CUSTOM_LLM_API_KEY")
 

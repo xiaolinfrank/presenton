@@ -111,6 +111,8 @@ You can also set the following environment variables to customize the image gene
 - **GOOGLE_IMAGE_MODEL=[Google Image Model ID]**: Specify the Google image generation model (default: "gemini-2.5-flash-image-preview").
 - **OPENAI_IMAGE_URL=[Custom OpenAI Image API URL]**: Custom endpoint for OpenAI image generation. Falls back to **OPENAI_URL** if not set.
 - **GOOGLE_IMAGE_URL=[Custom Google Image API URL]**: Custom endpoint for Google image generation. Falls back to **GOOGLE_URL** if not set.
+- **OPENAI_IMAGE_API_KEY=[OpenAI Image API Key]**: Separate API key for OpenAI image generation. Falls back to **OPENAI_API_KEY** if not set.
+- **GOOGLE_IMAGE_API_KEY=[Google Image API Key]**: Separate API key for Google image generation. Falls back to **GOOGLE_API_KEY** if not set.
 - **PEXELS_API_KEY=[Your Pexels API Key]**: Required if using **pexels** as the image provider.
 - **PIXABAY_API_KEY=[Your Pixabay API Key]**: Required if using **pixabay** as the image provider.
 - **GOOGLE_API_KEY=[Your Google API Key]**: Required if using **gemini_flash** as the image provider.

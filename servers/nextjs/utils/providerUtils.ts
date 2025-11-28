@@ -48,6 +48,8 @@ export const updateLLMConfig = (
     google_image_model: "GOOGLE_IMAGE_MODEL",
     openai_image_url: "OPENAI_IMAGE_URL",
     google_image_url: "GOOGLE_IMAGE_URL",
+    openai_image_api_key: "OPENAI_IMAGE_API_KEY",
+    google_image_api_key: "GOOGLE_IMAGE_API_KEY",
     disable_image_generation: "DISABLE_IMAGE_GENERATION",
     use_custom_url: "USE_CUSTOM_URL",
     tool_calls: "TOOL_CALLS",

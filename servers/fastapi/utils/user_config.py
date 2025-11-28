@@ -11,6 +11,7 @@ from utils.get_env import (
     get_disable_image_generation_env,
     get_disable_thinking_env,
     get_google_api_key_env,
+    get_google_image_api_key_env,
     get_google_image_model_env,
     get_google_image_url_env,
     get_google_model_env,
@@ -19,6 +20,7 @@ from utils.get_env import (
     get_ollama_model_env,
     get_ollama_url_env,
     get_openai_api_key_env,
+    get_openai_image_api_key_env,
     get_openai_image_model_env,
     get_openai_image_url_env,
     get_openai_model_env,
@@ -42,6 +44,7 @@ from utils.set_env import (
     set_disable_thinking_env,
     set_extended_reasoning_env,
     set_google_api_key_env,
+    set_google_image_api_key_env,
     set_google_image_model_env,
     set_google_image_url_env,
     set_google_model_env,
@@ -50,6 +53,7 @@ from utils.set_env import (
     set_ollama_model_env,
     set_ollama_url_env,
     set_openai_api_key_env,
+    set_openai_image_api_key_env,
     set_openai_image_model_env,
     set_openai_image_url_env,
     set_openai_model_env,
@@ -96,6 +100,8 @@ def get_user_config():
         GOOGLE_IMAGE_MODEL=existing_config.GOOGLE_IMAGE_MODEL or get_google_image_model_env(),
         OPENAI_IMAGE_URL=existing_config.OPENAI_IMAGE_URL or get_openai_image_url_env(),
         GOOGLE_IMAGE_URL=existing_config.GOOGLE_IMAGE_URL or get_google_image_url_env(),
+        OPENAI_IMAGE_API_KEY=existing_config.OPENAI_IMAGE_API_KEY or get_openai_image_api_key_env(),
+        GOOGLE_IMAGE_API_KEY=existing_config.GOOGLE_IMAGE_API_KEY or get_google_image_api_key_env(),
         DISABLE_IMAGE_GENERATION=(
             existing_config.DISABLE_IMAGE_GENERATION
             if existing_config.DISABLE_IMAGE_GENERATION is not None
@@ -168,6 +174,10 @@ def update_env_with_user_config():
         set_openai_image_url_env(user_config.OPENAI_IMAGE_URL)
     if user_config.GOOGLE_IMAGE_URL:
         set_google_image_url_env(user_config.GOOGLE_IMAGE_URL)
+    if user_config.OPENAI_IMAGE_API_KEY:
+        set_openai_image_api_key_env(user_config.OPENAI_IMAGE_API_KEY)
+    if user_config.GOOGLE_IMAGE_API_KEY:
+        set_google_image_api_key_env(user_config.GOOGLE_IMAGE_API_KEY)
     if user_config.PIXABAY_API_KEY:
         set_pixabay_api_key_env(user_config.PIXABAY_API_KEY)
     if user_config.PEXELS_API_KEY:
