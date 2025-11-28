@@ -72,4 +72,9 @@ def parse_json_response(text: str) -> dict:
         ValueError: If JSON parsing fails
     """
     cleaned_text = clean_json_response(text)
-    return dict(dirtyjson.loads(cleaned_text))
+    try:
+        return dict(dirtyjson.loads(cleaned_text))
+    except Exception as e:
+        import logging
+        logging.error(f"DEBUG: Failed to parse. Full response:\n{text}\n")
+        raise
