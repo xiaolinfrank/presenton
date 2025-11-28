@@ -32,44 +32,44 @@ const roboto = Roboto({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://presenton.ai"),
-  title: "Presenton - Open Source AI presentation generator",
+  title: "AI 演示文稿生成器 - 深圳汇芯生物医疗科技有限公司",
   description:
-    "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+    "AI 智能演示文稿生成器，支持自定义布局、多模型支持（OpenAI、Gemini、Ollama），可导出 PDF/PPTX 格式。",
   keywords: [
-    "AI presentation generator",
-    "data storytelling",
-    "data visualization tool",
-    "AI data presentation",
-    "presentation generator",
-    "data to presentation",
-    "interactive presentations",
-    "professional slides",
+    "AI演示文稿生成器",
+    "数据可视化",
+    "智能PPT",
+    "AI数据演示",
+    "演示文稿生成",
+    "数据转演示",
+    "交互式演示",
+    "专业幻灯片",
   ],
   openGraph: {
-    title: "Presenton - Open Source AI presentation generator",
+    title: "AI 演示文稿生成器 - 深圳汇芯生物医疗科技有限公司",
     description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+      "AI 智能演示文稿生成器，支持自定义布局、多模型支持（OpenAI、Gemini、Ollama），可导出 PDF/PPTX 格式。",
     url: "https://presenton.ai",
-    siteName: "Presenton",
+    siteName: "汇芯AI演示",
     images: [
       {
         url: "https://presenton.ai/presenton-feature-graphics.png",
         width: 1200,
         height: 630,
-        alt: "Presenton Logo",
+        alt: "汇芯AI演示",
       },
     ],
     type: "website",
-    locale: "en_US",
+    locale: "zh_CN",
   },
   alternates: {
     canonical: "https://presenton.ai",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Presenton - Open Source AI presentation generator",
+    title: "AI 演示文稿生成器 - 深圳汇芯生物医疗科技有限公司",
     description:
-      "Open-source AI presentation generator with custom layouts, multi-model support (OpenAI, Gemini, Ollama), and PDF/PPTX export. A free Gamma alternative.",
+      "AI 智能演示文稿生成器，支持自定义布局、多模型支持（OpenAI、Gemini、Ollama），可导出 PDF/PPTX 格式。",
     images: ["https://presenton.ai/presenton-feature-graphics.png"],
   },
 };
@@ -81,7 +81,7 @@ export default function RootLayout({
 }>) {
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body
         className={`${inter.variable} ${roboto.variable} ${instrument_sans.variable} antialiased`}
       >

@@ -16,12 +16,16 @@ const Header = () => {
         <div className="flex items-center justify-between py-1">
           <div className="flex items-center gap-3">
             {(pathname !== "/upload" && pathname !== "/dashboard") && <BackBtn />}
-            <Link href="/dashboard" onClick={() => trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/dashboard" })}>
+            <Link href="/dashboard" onClick={() => trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/dashboard" })} className="flex items-center gap-3">
               <img
-                src="/logo-white.png"
-                alt="Presentation logo"
-                className="h-16"
+                src="/company-logo.jpg"
+                alt="公司Logo"
+                className="h-12 w-auto"
               />
+              <div className="flex flex-col text-white">
+                <span className="text-sm font-medium">深圳汇芯生物医疗科技有限公司</span>
+                <span className="text-xs opacity-80">AI 创新及应用部</span>
+              </div>
             </Link>
           </div>
           <div className="flex items-center gap-3">
@@ -33,7 +37,7 @@ const Header = () => {
               role="menuitem"
             >
               <FilePlus2 className="w-5 h-5" />
-              <span className="text-sm font-medium font-inter">Create Template</span>
+              <span className="text-sm font-medium font-inter">创建模板</span>
             </Link>
             <Link
               href="/template-preview"
@@ -43,7 +47,7 @@ const Header = () => {
               role="menuitem"
             >
               <Layout className="w-5 h-5" />
-              <span className="text-sm font-medium font-inter">Templates</span>
+              <span className="text-sm font-medium font-inter">模板库</span>
             </Link>
             <HeaderNav />
           </div>

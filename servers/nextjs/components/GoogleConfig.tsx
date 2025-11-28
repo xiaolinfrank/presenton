@@ -85,7 +85,7 @@ export default function GoogleConfig({
       {/* API Key Input */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Google API Key
+          Google API 密钥
         </label>
         <div className="relative">
           <input
@@ -93,12 +93,12 @@ export default function GoogleConfig({
             value={googleApiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
             className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-            placeholder="Enter your API key"
+            placeholder="请输入 API 密钥"
           />
         </div>
         <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
           <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-          Your API key will be stored locally and never shared
+          您的 API 密钥将仅保存在本地，不会被共享
         </p>
       </div>
 
@@ -116,10 +116,10 @@ export default function GoogleConfig({
             {modelsLoading ? (
               <div className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Checking for models...
+                正在检查模型...
               </div>
             ) : (
-              "Check for available models"
+              "检查可用模型"
             )}
           </button>
         </div>
@@ -129,7 +129,7 @@ export default function GoogleConfig({
       {modelsChecked && availableModels.length === 0 && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
-            No models found. Please make sure your API key is valid and has access to Google models.
+            未找到模型。请确保您的 API 密钥有效且有权限访问 Google 模型。
           </p>
         </div>
       )}
@@ -138,7 +138,7 @@ export default function GoogleConfig({
       {modelsChecked && availableModels.length > 0 ? (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Select Google Model
+            选择 Google 模型
           </label>
           <div className="w-full">
             <Popover
@@ -156,7 +156,7 @@ export default function GoogleConfig({
                     <span className="text-sm font-medium text-gray-900">
                       {googleModel
                         ? availableModels.find(model => model === googleModel) || googleModel
-                        : "Select a model"}
+                        : "选择模型"}
                     </span>
                   </div>
                   <ChevronsUpDown className="w-4 h-4 text-gray-500" />
@@ -168,9 +168,9 @@ export default function GoogleConfig({
                 style={{ width: "var(--radix-popover-trigger-width)" }}
               >
                 <Command>
-                  <CommandInput placeholder="Search models..." />
+                  <CommandInput placeholder="搜索模型..." />
                   <CommandList>
-                    <CommandEmpty>No model found.</CommandEmpty>
+                    <CommandEmpty>未找到模型</CommandEmpty>
                     <CommandGroup>
                       {availableModels.map((model, index) => (
                         <CommandItem
@@ -213,7 +213,7 @@ export default function GoogleConfig({
       <div>
         <div className="flex items-center justify-between mb-4 bg-green-50 p-2 rounded-sm">
           <label className="text-sm font-medium text-gray-700">
-            Enable Web Grounding
+            启用网络搜索增强
           </label>
           <Switch
             checked={!!webGrounding}
@@ -222,7 +222,7 @@ export default function GoogleConfig({
         </div>
         <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
           <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-          If enabled, the model can use web search grounding when available.
+          启用后，模型可使用网络搜索来增强生成内容的准确性。
         </p>
       </div>
     </div>

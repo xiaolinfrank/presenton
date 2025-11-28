@@ -85,7 +85,7 @@ export default function LLMProviderSelection({
     setButtonState({
       isLoading: false,
       isDisabled: needsModelSelection || needsApiKey || needsOllamaUrl,
-      text: needsModelSelection ? "Please Select a Model" : needsApiKey ? "Please Enter API Key" : needsOllamaUrl ? "Please Enter Ollama URL" : "Save Configuration",
+      text: needsModelSelection ? "请选择模型" : needsApiKey ? "请输入 API 密钥" : needsOllamaUrl ? "请输入 Ollama 地址" : "保存配置",
       showProgress: false
     });
 
@@ -222,7 +222,7 @@ export default function LLMProviderSelection({
         <div className="my-8">
           <div className="flex items-center justify-between mb-4 bg-green-50 p-2 rounded-sm">
             <label className="text-sm font-medium text-gray-700">
-              Disable Image Generation
+              禁用图片生成
             </label>
             <Switch
               checked={isImageGenerationDisabled}
@@ -236,7 +236,7 @@ export default function LLMProviderSelection({
           </div>
           <p className="text-sm text-gray-500 flex items-center gap-2">
             <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-            When enabled, slides will not include automatically generated images.
+            启用后，幻灯片将不包含自动生成的图片。
           </p>
         </div>
 
@@ -245,7 +245,7 @@ export default function LLMProviderSelection({
             {/* Image Provider Selection */}
             <div className="my-8">
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                Select Image Provider
+                选择图片提供商
               </label>
               <div className="w-full">
                 <Popover
@@ -264,7 +264,7 @@ export default function LLMProviderSelection({
                           {llmConfig.IMAGE_PROVIDER
                             ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]?.label ||
                             llmConfig.IMAGE_PROVIDER
-                            : "Select image provider"}
+                            : "选择图片提供商"}
                         </span>
                       </div>
                       <ChevronsUpDown className="w-4 h-4 text-gray-500" />
@@ -276,9 +276,9 @@ export default function LLMProviderSelection({
                     style={{ width: "var(--radix-popover-trigger-width)" }}
                   >
                     <Command>
-                      <CommandInput placeholder="Search provider..." />
+                      <CommandInput placeholder="搜索提供商..." />
                       <CommandList>
-                        <CommandEmpty>No provider found.</CommandEmpty>
+                        <CommandEmpty>未找到提供商</CommandEmpty>
                         <CommandGroup>
                           {Object.values(IMAGE_PROVIDERS).map(
                             (provider, index) => (
@@ -345,7 +345,7 @@ export default function LLMProviderSelection({
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder={`Enter your ${provider.apiKeyFieldLabel}`}
+                        placeholder={`请输入 ${provider.apiKeyFieldLabel}`}
                         className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                         value={
                           provider.apiKeyField === "PEXELS_API_KEY"
@@ -365,7 +365,7 @@ export default function LLMProviderSelection({
                     </div>
                     <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
                       <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-                      API key for {provider.label} image generation
+                      用于 {provider.label} 图片生成的 API 密钥
                     </p>
                   </div>
                 );
@@ -379,10 +379,10 @@ export default function LLMProviderSelection({
             <Info className="w-5 h-5 text-blue-500 mt-0.5" />
             <div>
               <h3 className="text-sm font-medium text-blue-900 mb-1">
-                Selected Models
+                已选择的模型
               </h3>
               <p className="text-sm text-blue-700">
-                Using{" "}
+                使用{" "}
                 {llmConfig.LLM === "ollama"
                   ? llmConfig.OLLAMA_MODEL ?? "xxxxx"
                   : llmConfig.LLM === "custom"
@@ -394,17 +394,17 @@ export default function LLMProviderSelection({
                         : llmConfig.LLM === "openai"
                           ? llmConfig.OPENAI_MODEL ?? "xxxxx"
                           : "xxxxx"}{" "}
-                for text generation{" "}
+                进行文本生成{" "}
                 {isImageGenerationDisabled ? (
-                  "and image generation is disabled."
+                  "，已禁用图片生成。"
                 ) : (
                   <>
-                    and{" "}
+                    ，使用{" "}
                     {llmConfig.IMAGE_PROVIDER &&
                       IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER]
                       ? IMAGE_PROVIDERS[llmConfig.IMAGE_PROVIDER].label
                       : "xxxxx"}{" "}
-                    for images
+                    生成图片
                   </>
                 )}
               </p>

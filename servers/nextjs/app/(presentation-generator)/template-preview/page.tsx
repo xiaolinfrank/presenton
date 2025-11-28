@@ -98,9 +98,9 @@ const LayoutPreview = () => {
       <div className=" sticky top-0 z-30">
         <div className="max-w-7xl mx-auto border-b px-6 py-6">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">All Templates</h1>
+            <h1 className="text-3xl font-bold text-gray-900">所有模板</h1>
             <p className="text-gray-600 mt-2">
-              {layoutTemplates.length} templates
+              共 {layoutTemplates.length} 个模板
             </p>
           </div>
         </div>
@@ -108,12 +108,12 @@ const LayoutPreview = () => {
         <section className="h-full pt-8 pb-8 flex justify-center items-center">
           <div className="max-w-7xl mx-auto px-6 py-6 w-full">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Custom AI Templates</h2>
+              <h2 className="text-xl font-semibold text-gray-900">自定义 AI 模板</h2>
               <button className="text-sm text-gray-800 hover:text-blue-600 transition-colors flex items-center gap-2 group" onClick={() => {
                 trackEvent(MixpanelEvent.Navigation, { from: pathname, to: `/custom-template` });
                 router.push(`/custom-template`)
               }}>
-                Create Custom Template
+                创建自定义模板
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -150,7 +150,7 @@ const LayoutPreview = () => {
                           <p className="text-xs text-gray-600  ">ID: {template.templateID}</p>
                           <Copy className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" onClick={() => {
                             navigator.clipboard.writeText(template.templateID);
-                            toast.success("Copied to clipboard");
+                            toast.success("已复制到剪贴板");
                           }} />
                         </div>
                         <p className="text-sm text-gray-600 my-4">
@@ -193,14 +193,14 @@ const LayoutPreview = () => {
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-semibold text-gray-900 capitalize group-hover:text-blue-600 transition-colors">
-                        Create Custom Template
+                        创建自定义模板
                       </h3>
                       <div className="flex items-center gap-2">
                         <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                       </div>
                     </div>
                     <p className="text-sm text-gray-600 mb-4">
-                      Create your first custom template
+                      创建您的第一个自定义模板
                     </p>
                   </div>
                 </Card>
@@ -212,7 +212,7 @@ const LayoutPreview = () => {
         {/* In Built Templates */}
         <section className="h-full pt-8 flex justify-center items-center">
           <div className="max-w-7xl mx-auto px-6 py-6 w-full">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Inbuilt Templates</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">内置模板</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inBuiltTemplates.map((template) => {
                 const isCustom = template.templateID.toLowerCase().startsWith("custom-");

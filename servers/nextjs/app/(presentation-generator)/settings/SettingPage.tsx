@@ -36,7 +36,7 @@ const SettingsPage = () => {
   const [buttonState, setButtonState] = useState<ButtonState>({
     isLoading: false,
     isDisabled: false,
-    text: "Save Configuration",
+    text: "保存配置",
     showProgress: false,
   });
 
@@ -69,7 +69,7 @@ const SettingsPage = () => {
         ...prev,
         isLoading: true,
         isDisabled: true,
-        text: "Saving Configuration...",
+        text: "正在保存配置...",
       }));
       trackEvent(MixpanelEvent.Settings_SaveConfiguration_API_Call);
       await handleSaveLLMConfig(llmConfig);
@@ -84,22 +84,22 @@ const SettingsPage = () => {
           await handleModelDownload();
         }
       }
-      toast.info("Configuration saved successfully");
+      toast.info("配置保存成功");
       setButtonState(prev => ({
         ...prev,
         isLoading: false,
         isDisabled: false,
-        text: "Save Configuration",
+        text: "保存配置",
       }));
       trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/upload" });
       router.push("/upload");
     } catch (error) {
-      toast.info(error instanceof Error ? error.message : "Failed to save configuration");
+      toast.info(error instanceof Error ? error.message : "配置保存失败");
       setButtonState(prev => ({
         ...prev,
         isLoading: false,
         isDisabled: false,
-        text: "Save Configuration",
+        text: "保存配置",
       }));
     }
   };
@@ -126,7 +126,7 @@ const SettingsPage = () => {
       setButtonState({
         isLoading: true,
         isDisabled: true,
-        text: `Downloading Model (${percentage}%)`,
+        text: `正在下载模型 (${percentage}%)`,
         showProgress: true,
         progressPercentage: percentage,
         status: downloadingModel.status,
@@ -137,7 +137,7 @@ const SettingsPage = () => {
       setTimeout(() => {
         setShowDownloadModal(false);
         setDownloadingModel(null);
-        toast.info("Model downloaded successfully!");
+        toast.info("模型下载成功！");
       }, 2000);
     }
   }, [downloadingModel]);
@@ -209,8 +209,8 @@ const SettingsPage = () => {
               {/* Title */}
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 {downloadingModel.done
-                  ? "Download Complete!"
-                  : "Downloading Model"}
+                  ? "下载完成！"
+                  : "正在下载模型"}
               </h3>
 
               {/* Model Name */}
@@ -228,7 +228,7 @@ const SettingsPage = () => {
                     />
                   </div>
                   <p className="text-sm text-gray-600 mt-2">
-                    {downloadProgress}% Complete
+                    已完成 {downloadProgress}%
                   </p>
                 </div>
               )}
@@ -248,11 +248,11 @@ const SettingsPage = () => {
                 downloadingModel.status !== "pulled" && (
                   <div className="text-xs text-gray-500">
                     {downloadingModel.status === "downloading" &&
-                      "Downloading model files..."}
+                      "正在下载模型文件..."}
                     {downloadingModel.status === "verifying" &&
-                      "Verifying model integrity..."}
+                      "正在验证模型完整性..."}
                     {downloadingModel.status === "pulling" &&
-                      "Pulling model from registry..."}
+                      "正在从仓库拉取模型..."}
                   </div>
                 )}
 
@@ -261,12 +261,12 @@ const SettingsPage = () => {
                 <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>
-                      Downloaded:{" "}
+                      已下载:{" "}
                       {(downloadingModel.downloaded / 1024 / 1024).toFixed(1)}{" "}
                       MB
                     </span>
                     <span>
-                      Total: {(downloadingModel.size / 1024 / 1024).toFixed(1)}{" "}
+                      总大小: {(downloadingModel.size / 1024 / 1024).toFixed(1)}{" "}
                       MB
                     </span>
                   </div>

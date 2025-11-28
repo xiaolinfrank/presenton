@@ -78,12 +78,12 @@ const UploadPage = () => {
    */
   const validateConfiguration = (): boolean => {
     if (!config.language || !config.slides) {
-      toast.error("Please select number of Slides & Language");
+      toast.error("请选择幻灯片数量和语言");
       return false;
     }
 
     if (!config.prompt.trim() && files.length === 0) {
-      toast.error("No Prompt or Document Provided");
+      toast.error("请输入提示词或上传文档");
       return false;
     }
     return true;
@@ -114,10 +114,10 @@ const UploadPage = () => {
   const handleDocumentProcessing = async () => {
     setLoadingState({
       isLoading: true,
-      message: "Processing documents...",
+      message: "正在处理文档...",
       showProgress: true,
       duration: 90,
-      extra_info: files.length > 0 ? "It might take a few minutes for large documents." : "",
+      extra_info: files.length > 0 ? "大型文档可能需要几分钟处理时间。" : "",
     });
 
     let documents = [];
@@ -150,7 +150,7 @@ const UploadPage = () => {
   const handleDirectPresentationGeneration = async () => {
     setLoadingState({
       isLoading: true,
-      message: "Generating outlines...",
+      message: "正在生成大纲...",
       showProgress: true,
       duration: 30,
     });
@@ -188,8 +188,8 @@ const UploadPage = () => {
       duration: 0,
       showProgress: false,
     });
-    toast.error("Error", {
-      description: error.message || "Error in upload page.",
+    toast.error("错误", {
+      description: error.message || "上传页面出错",
     });
   };
 
@@ -227,7 +227,7 @@ const UploadPage = () => {
         className="w-full rounded-[32px] flex items-center justify-center py-6 bg-[#5141e5] text-white font-instrument_sans font-semibold text-xl hover:bg-[#5141e5]/80 transition-colors duration-300"
         data-testid="next-button"
       >
-        <span>Next</span>
+        <span>下一步</span>
         <ChevronRight className="!w-6 !h-6" />
       </Button>
     </Wrapper>

@@ -43,14 +43,14 @@ export const PresentationCard = ({
     const response = await DashboardApi.deletePresentation(id);
 
     if (response) {
-      toast.success("Presentation deleted", {
-        description: "The presentation has been deleted successfully",
+      toast.success("演示文稿已删除", {
+        description: "演示文稿删除成功",
       });
       if (onDeleted) {
         onDeleted(id);
       }
     } else {
-      toast.error("Error deleting presentation");
+      toast.error("删除演示文稿出错");
     }
   };
   return (
@@ -78,7 +78,7 @@ export const PresentationCard = ({
                 className="flex items-center justify-between w-full px-2 py-1 hover:bg-gray-100"
                 onClick={handleDelete}
               >
-                <p>Delete</p>
+                <p>删除</p>
                 <TrashIcon className="w-4 h-4 text-red-500" />
               </button>
             </PopoverContent>
