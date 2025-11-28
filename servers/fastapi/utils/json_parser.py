@@ -47,6 +47,14 @@ def clean_json_response(text: str) -> str:
     cleaned_text = re.sub(r',\s*}', '}', cleaned_text)
     cleaned_text = re.sub(r',\s*]', ']', cleaned_text)
 
+    # Fix duplicate opening braces (common LLM error)
+    # Pattern like: { { "content" -> { "content"
+    cleaned_text = re.sub(r'\{\s*\{(\s*")', r'{\1', cleaned_text)
+
+    # Fix duplicate closing braces
+    # Pattern like: } } -> }
+    cleaned_text = re.sub(r'\}\s*\}(\s*[,\]\}])', r'}\1', cleaned_text)
+
     return cleaned_text
 
 
