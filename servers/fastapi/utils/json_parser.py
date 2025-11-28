@@ -74,6 +74,15 @@ def clean_json_response(text: str) -> str:
         cleaned_text
     )
 
+    # Fix missing closing brace before __speaker_note__
+    # When LLM forgets to close the media object after image/icon nested object
+    # Pattern: "__image_prompt__": "..." }, "__speaker_note__" -> "__image_prompt__": "..." } }, "__speaker_note__"
+    cleaned_text = re.sub(
+        r'("__(?:icon_query|image_prompt)__"\s*:\s*"[^"]*"\s*\})\s*,\s*("__speaker_note__")',
+        r'\1 }, \2',
+        cleaned_text
+    )
+
     return cleaned_text
 
 
