@@ -528,9 +528,23 @@ class LLMClient:
                 },
             }
 
+        # For third-party APIs, inject schema into messages since they don't support json_schema
+        actual_messages = messages
+        if is_third_party and depth == 0:
+            import json
+            schema_instruction = f"\n\nIMPORTANT: You must respond with valid JSON that exactly matches this schema:\n```json\n{json.dumps(response_schema, indent=2)}\n```\nRespond ONLY with the JSON object, no additional text."
+            # Add schema instruction to the last user message or create a new one
+            actual_messages = list(messages)
+            if actual_messages and hasattr(actual_messages[-1], 'content'):
+                last_msg = actual_messages[-1]
+                actual_messages[-1] = type(last_msg)(
+                    role=last_msg.role,
+                    content=last_msg.content + schema_instruction
+                )
+
         response = await client.chat.completions.create(
             model=model,
-            messages=[message.model_dump() for message in messages],
+            messages=[message.model_dump() for message in actual_messages],
             response_format=response_format_param,
             max_completion_tokens=max_tokens,
             tools=all_tools,
@@ -1230,6 +1244,20 @@ class LLMClient:
                 },
             }
 
+        # For third-party APIs, inject schema into messages since they don't support json_schema
+        actual_messages = messages
+        if is_third_party and depth == 0:
+            import json
+            schema_instruction = f"\n\nIMPORTANT: You must respond with valid JSON that exactly matches this schema:\n```json\n{json.dumps(response_schema, indent=2)}\n```\nRespond ONLY with the JSON object, no additional text."
+            # Add schema instruction to the last user message or create a new one
+            actual_messages = list(messages)
+            if actual_messages and hasattr(actual_messages[-1], 'content'):
+                last_msg = actual_messages[-1]
+                actual_messages[-1] = type(last_msg)(
+                    role=last_msg.role,
+                    content=last_msg.content + schema_instruction
+                )
+
         tool_calls: List[LLMToolCall] = []
         current_index = 0
         current_id = None
@@ -1239,7 +1267,7 @@ class LLMClient:
         has_response_schema_tool_call = False
         async for event in await client.chat.completions.create(
             model=model,
-            messages=[message.model_dump() for message in messages],
+            messages=[message.model_dump() for message in actual_messages],
             max_completion_tokens=max_tokens,
             tools=all_tools,
             response_format=response_format_param,
