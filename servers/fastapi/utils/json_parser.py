@@ -55,6 +55,16 @@ def clean_json_response(text: str) -> str:
     # Pattern like: } } -> }
     cleaned_text = re.sub(r'\}\s*\}(\s*[,\]\}])', r'}\1', cleaned_text)
 
+    # Fix missing closing brace after icon/image nested objects
+    # When LLM forgets to close the parent object after a nested object
+    # Pattern: "__icon_query__": "..." }, { " -> "__icon_query__": "..." } }, { "
+    # Pattern: "__image_prompt__": "..." }, { " -> "__image_prompt__": "..." } }, { "
+    cleaned_text = re.sub(
+        r'("__(?:icon_query|image_prompt)__"\s*:\s*"[^"]*"\s*\})\s*,\s*(\{)',
+        r'\1 }, \2',
+        cleaned_text
+    )
+
     return cleaned_text
 
 
