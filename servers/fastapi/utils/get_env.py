@@ -61,6 +61,10 @@ def get_google_model_env():
     return os.getenv("GOOGLE_MODEL")
 
 
+def get_google_url_env():
+    return os.getenv("GOOGLE_URL")
+
+
 def get_custom_llm_api_key_env():
     return os.getenv("CUSTOM_LLM_API_KEY")
 

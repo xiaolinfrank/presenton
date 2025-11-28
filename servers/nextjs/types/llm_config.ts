@@ -9,6 +9,7 @@ export interface LLMConfig {
   // Google
   GOOGLE_API_KEY?: string;
   GOOGLE_MODEL?: string;
+  GOOGLE_URL?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;

@@ -33,6 +33,7 @@ export const updateLLMConfig = (
     openai_url: "OPENAI_URL",
     google_api_key: "GOOGLE_API_KEY",
     google_model: "GOOGLE_MODEL",
+    google_url: "GOOGLE_URL",
     anthropic_api_key: "ANTHROPIC_API_KEY",
     anthropic_model: "ANTHROPIC_MODEL",
     ollama_url: "OLLAMA_URL",

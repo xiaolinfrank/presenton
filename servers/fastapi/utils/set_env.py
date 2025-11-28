@@ -41,6 +41,10 @@ def set_google_model_env(value):
     os.environ["GOOGLE_MODEL"] = value
 
 
+def set_google_url_env(value):
+    os.environ["GOOGLE_URL"] = value
+
+
 def set_anthropic_api_key_env(value):
     os.environ["ANTHROPIC_API_KEY"] = value
 

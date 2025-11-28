@@ -13,6 +13,7 @@ class UserConfig(BaseModel):
     # Google
     GOOGLE_API_KEY: Optional[str] = None
     GOOGLE_MODEL: Optional[str] = None
+    GOOGLE_URL: Optional[str] = None
 
     # Anthropic
     ANTHROPIC_API_KEY: Optional[str] = None

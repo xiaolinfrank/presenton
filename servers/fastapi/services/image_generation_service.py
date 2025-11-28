@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 from models.image_prompt import ImagePrompt
 from models.sql.image_asset import ImageAsset
 from utils.download_helpers import download_file
-from utils.get_env import get_openai_url_env, get_pexels_api_key_env
+from utils.get_env import get_google_url_env, get_openai_url_env, get_pexels_api_key_env
 from utils.get_env import get_pixabay_api_key_env
 from utils.image_provider import (
     is_image_generation_disabled,
@@ -102,7 +102,8 @@ class ImageGenerationService:
         return await download_file(image_url, output_directory)
 
     async def generate_image_google(self, prompt: str, output_directory: str) -> str:
-        client = genai.Client()
+        google_url = get_google_url_env()
+        client = genai.Client(http_options={'api_endpoint': google_url}) if google_url else genai.Client()
         response = await asyncio.to_thread(
             client.models.generate_content,
             model="gemini-2.5-flash-image-preview",

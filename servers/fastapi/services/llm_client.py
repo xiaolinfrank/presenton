@@ -48,6 +48,7 @@ from utils.get_env import (
     get_custom_llm_url_env,
     get_disable_thinking_env,
     get_google_api_key_env,
+    get_google_url_env,
     get_ollama_url_env,
     get_openai_api_key_env,
     get_openai_url_env,
@@ -124,6 +125,9 @@ class LLMClient:
                 status_code=400,
                 detail="Google API Key is not set",
             )
+        google_url = get_google_url_env()
+        if google_url:
+            return genai.Client(http_options={'api_endpoint': google_url})
         return genai.Client()
 
     def _get_anthropic_client(self):
