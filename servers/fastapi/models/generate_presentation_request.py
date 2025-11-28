@@ -20,7 +20,7 @@ class GeneratePresentationRequest(BaseModel):
     web_search: bool = Field(default=False, description="Whether to enable web search")
     n_slides: int = Field(default=8, description="Number of slides to generate")
     language: str = Field(
-        default="English", description="Language for the presentation"
+        default="简体中文", description="Language for the presentation"
     )
     template: str = Field(
         default="general", description="Template to use for the presentation"

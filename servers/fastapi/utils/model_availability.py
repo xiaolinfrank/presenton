@@ -1,5 +1,5 @@
 from constants.supported_ollama_models import SUPPORTED_OLLAMA_MODELS
-from constants.llm import OPENAI_URL
+from constants.llm import OPENAI_URL as DEFAULT_OPENAI_URL
 from enums.image_provider import ImageProvider
 from enums.llm_provider import LLMProvider
 from utils.available_models import (
@@ -14,6 +14,7 @@ from utils.get_env import (
     get_google_model_env,
     get_openai_api_key_env,
     get_openai_model_env,
+    get_openai_url_env,
     get_pixabay_api_key_env,
     get_pexels_api_key_env,
 )
@@ -43,8 +44,9 @@ async def check_llm_and_image_provider_api_or_model_availability():
                 raise Exception("OPENAI_API_KEY must be provided")
             openai_model = get_openai_model_env()
             if openai_model:
+                openai_url = get_openai_url_env() or DEFAULT_OPENAI_URL
                 available_models = await list_available_openai_compatible_models(
-                    OPENAI_URL, openai_api_key
+                    openai_url, openai_api_key
                 )
                 if openai_model not in available_models:
                     print("-" * 50)
