@@ -71,7 +71,7 @@ export default function OllamaConfig({
       <div>
         <div className="flex items-center justify-between mb-4 bg-green-50 p-2 rounded-sm">
           <label className="text-sm font-medium text-gray-700">
-            Use custom Ollama URL
+            使用自定义 Ollama 地址
           </label>
           <Switch
             checked={useCustomUrl}
@@ -81,13 +81,13 @@ export default function OllamaConfig({
         {useCustomUrl && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ollama URL
+              Ollama 地址
             </label>
             <div className="relative">
               <input
                 type="text"
                 required
-                placeholder="Enter your Ollama URL"
+                placeholder="请输入 Ollama 地址"
                 className="w-full px-4 py-2.5 outline-none border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                 value={ollamaUrl}
                 onChange={(e) => onInputChange(e.target.value, "ollama_url")}
@@ -95,7 +95,7 @@ export default function OllamaConfig({
             </div>
             <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
               <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
-              Change this if you are using a custom Ollama instance
+              如果使用自定义 Ollama 实例，请修改此地址
             </p>
           </div>
         )}
@@ -104,14 +104,14 @@ export default function OllamaConfig({
       {/* Model Selection */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          Choose a supported model
+          选择支持的模型
         </label>
         <div className="w-full">
           {ollamaModelsLoading ? (
             <div className="w-full h-12 px-4 py-4 border border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-                <span className="text-sm text-gray-600">Loading models...</span>
+                <span className="text-sm text-gray-600">正在加载模型...</span>
               </div>
             </div>
           ) : ollamaModels && ollamaModels.length > 0 ? (
@@ -132,7 +132,7 @@ export default function OllamaConfig({
                         ? ollamaModels?.find(
                           (m) => m.value === ollamaModel
                         )?.label || ollamaModel
-                        : "Select a model"}
+                        : "选择模型"}
                     </span>
                     {ollamaModel && (
                       <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-1">
@@ -153,9 +153,9 @@ export default function OllamaConfig({
                 style={{ width: "var(--radix-popover-trigger-width)" }}
               >
                 <Command>
-                  <CommandInput placeholder="Search model..." />
+                  <CommandInput placeholder="搜索模型..." />
                   <CommandList>
-                    <CommandEmpty>No model found.</CommandEmpty>
+                    <CommandEmpty>未找到模型</CommandEmpty>
                     <CommandGroup>
                       {ollamaModels?.map((model, index) => (
                         <CommandItem
@@ -207,7 +207,7 @@ export default function OllamaConfig({
         </div>
         {(!ollamaModels || ollamaModels.length === 0) && !ollamaModelsLoading && (
           <p className="mt-2 text-sm text-gray-500">
-            No models available. Please check your Ollama connection.
+            无可用模型。请检查 Ollama 连接。
           </p>
         )}
       </div>

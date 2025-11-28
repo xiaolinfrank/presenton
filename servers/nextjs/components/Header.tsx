@@ -9,18 +9,22 @@ const Header: React.FC = () => {
     <header className="w-full border-b bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/60 sticky top-0 z-50">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/logo-white.png" alt="Presenton" className="h-6 w-auto" />
+          <Link href="/" className="flex items-center gap-3">
+            <img src="/company-logo.png" alt="公司Logo" className="h-10 w-auto" />
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-gray-900">深圳汇芯生物医疗科技有限公司</span>
+              <span className="text-xs text-gray-500">AI 创新及应用部</span>
+            </div>
           </Link>
 
           <nav className="flex items-center gap-4">
             <Link href="/custom-layout" className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900">
               <Plus className="w-5 h-5" />
-              <span className="text-sm font-medium font-inter">Create Template</span>
+              <span className="text-sm font-medium font-inter">创建模板</span>
             </Link>
             <Link href="/template-preview" className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900">
               <Layout className="w-5 h-5" />
-              <span className="text-sm font-medium font-inter">Templates</span>
+              <span className="text-sm font-medium font-inter">模板库</span>
             </Link>
           </nav>
         </div>
