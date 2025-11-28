@@ -4,6 +4,7 @@ export interface LLMConfig {
   // OpenAI
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  OPENAI_URL?: string;
 
   // Google
   GOOGLE_API_KEY?: string;

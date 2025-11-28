@@ -50,6 +50,7 @@ from utils.get_env import (
     get_google_api_key_env,
     get_ollama_url_env,
     get_openai_api_key_env,
+    get_openai_url_env,
     get_tool_calls_env,
     get_web_grounding_env,
 )
@@ -112,6 +113,9 @@ class LLMClient:
                 status_code=400,
                 detail="OpenAI API Key is not set",
             )
+        openai_url = get_openai_url_env()
+        if openai_url:
+            return AsyncOpenAI(base_url=openai_url)
         return AsyncOpenAI()
 
     def _get_google_client(self):

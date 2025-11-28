@@ -30,6 +30,7 @@ export const updateLLMConfig = (
   const fieldMappings: Record<string, keyof LLMConfig> = {
     openai_api_key: "OPENAI_API_KEY",
     openai_model: "OPENAI_MODEL",
+    openai_url: "OPENAI_URL",
     google_api_key: "GOOGLE_API_KEY",
     google_model: "GOOGLE_MODEL",
     anthropic_api_key: "ANTHROPIC_API_KEY",
