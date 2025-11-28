@@ -49,12 +49,44 @@ def get_openai_model_env():
     return os.getenv("OPENAI_MODEL")
 
 
+def get_openai_url_env():
+    return os.getenv("OPENAI_URL")
+
+
 def get_google_api_key_env():
     return os.getenv("GOOGLE_API_KEY")
 
 
 def get_google_model_env():
     return os.getenv("GOOGLE_MODEL")
+
+
+def get_google_url_env():
+    return os.getenv("GOOGLE_URL")
+
+
+def get_openai_image_model_env():
+    return os.getenv("OPENAI_IMAGE_MODEL")
+
+
+def get_google_image_model_env():
+    return os.getenv("GOOGLE_IMAGE_MODEL")
+
+
+def get_openai_image_url_env():
+    return os.getenv("OPENAI_IMAGE_URL")
+
+
+def get_google_image_url_env():
+    return os.getenv("GOOGLE_IMAGE_URL")
+
+
+def get_openai_image_api_key_env():
+    return os.getenv("OPENAI_IMAGE_API_KEY")
+
+
+def get_google_image_api_key_env():
+    return os.getenv("GOOGLE_IMAGE_API_KEY")
 
 
 def get_custom_llm_api_key_env():

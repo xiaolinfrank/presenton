@@ -86,8 +86,10 @@ You may want to directly provide your API KEYS as environment variables and keep
 - **LLM=[openai/google/anthropic/ollama/custom]**: Select **LLM** of your choice.
 - **OPENAI_API_KEY=[Your OpenAI API Key]**: Provide this if **LLM** is set to **openai**
 - **OPENAI_MODEL=[OpenAI Model ID]**: Provide this if **LLM** is set to **openai** (default: "gpt-4.1")
+- **OPENAI_URL=[Custom OpenAI API URL]**: Provide this if you want to use a custom OpenAI-compatible endpoint (e.g., Azure OpenAI, proxy servers)
 - **GOOGLE_API_KEY=[Your Google API Key]**: Provide this if **LLM** is set to **google**
 - **GOOGLE_MODEL=[Google Model ID]**: Provide this if **LLM** is set to **google** (default: "models/gemini-2.0-flash")
+- **GOOGLE_URL=[Custom Google API URL]**: Provide this if you want to use a custom Google GenAI endpoint
 - **ANTHROPIC_API_KEY=[Your Anthropic API Key]**: Provide this if **LLM** is set to **anthropic**
 - **ANTHROPIC_MODEL=[Anthropic Model ID]**: Provide this if **LLM** is set to **anthropic** (default: "claude-3-5-sonnet-20241022")
 - **OLLAMA_URL=[Custom Ollama URL]**: Provide this if you want to custom Ollama URL and **LLM** is set to **ollama**
@@ -105,6 +107,12 @@ You can also set the following environment variables to customize the image gene
 - **IMAGE_PROVIDER=[pexels/pixabay/gemini_flash/dall-e-3]**: Select the image provider of your choice.
   - Required if **DISABLE_IMAGE_GENERATION** is not set to **true**.
   - Defaults to **dall-e-3** for OpenAI models, **gemini_flash** for Google models if not set.
+- **OPENAI_IMAGE_MODEL=[OpenAI Image Model ID]**: Specify the OpenAI image generation model (default: "dall-e-3"). Also supports "dall-e-2".
+- **GOOGLE_IMAGE_MODEL=[Google Image Model ID]**: Specify the Google image generation model (default: "gemini-2.5-flash-image-preview").
+- **OPENAI_IMAGE_URL=[Custom OpenAI Image API URL]**: Custom endpoint for OpenAI image generation. Falls back to **OPENAI_URL** if not set.
+- **GOOGLE_IMAGE_URL=[Custom Google Image API URL]**: Custom endpoint for Google image generation. Falls back to **GOOGLE_URL** if not set.
+- **OPENAI_IMAGE_API_KEY=[OpenAI Image API Key]**: Separate API key for OpenAI image generation. Falls back to **OPENAI_API_KEY** if not set.
+- **GOOGLE_IMAGE_API_KEY=[Google Image API Key]**: Separate API key for Google image generation. Falls back to **GOOGLE_API_KEY** if not set.
 - **PEXELS_API_KEY=[Your Pexels API Key]**: Required if using **pexels** as the image provider.
 - **PIXABAY_API_KEY=[Your Pixabay API Key]**: Required if using **pixabay** as the image provider.
 - **GOOGLE_API_KEY=[Your Google API Key]**: Required if using **gemini_flash** as the image provider.

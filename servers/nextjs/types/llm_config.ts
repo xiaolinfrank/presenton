@@ -4,10 +4,12 @@ export interface LLMConfig {
   // OpenAI
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  OPENAI_URL?: string;
 
   // Google
   GOOGLE_API_KEY?: string;
   GOOGLE_MODEL?: string;
+  GOOGLE_URL?: string;
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
@@ -25,6 +27,12 @@ export interface LLMConfig {
   // Image providers
   DISABLE_IMAGE_GENERATION?: boolean;
   IMAGE_PROVIDER?: string;
+  OPENAI_IMAGE_MODEL?: string;
+  GOOGLE_IMAGE_MODEL?: string;
+  OPENAI_IMAGE_URL?: string;
+  GOOGLE_IMAGE_URL?: string;
+  OPENAI_IMAGE_API_KEY?: string;
+  GOOGLE_IMAGE_API_KEY?: string;
   PEXELS_API_KEY?: string;
   PIXABAY_API_KEY?: string;
 

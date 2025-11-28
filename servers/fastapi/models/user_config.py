@@ -8,10 +8,12 @@ class UserConfig(BaseModel):
     # OpenAI
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: Optional[str] = None
+    OPENAI_URL: Optional[str] = None
 
     # Google
     GOOGLE_API_KEY: Optional[str] = None
     GOOGLE_MODEL: Optional[str] = None
+    GOOGLE_URL: Optional[str] = None
 
     # Anthropic
     ANTHROPIC_API_KEY: Optional[str] = None
@@ -29,6 +31,12 @@ class UserConfig(BaseModel):
     # Image Provider
     DISABLE_IMAGE_GENERATION: Optional[bool] = None
     IMAGE_PROVIDER: Optional[str] = None
+    OPENAI_IMAGE_MODEL: Optional[str] = None
+    GOOGLE_IMAGE_MODEL: Optional[str] = None
+    OPENAI_IMAGE_URL: Optional[str] = None
+    GOOGLE_IMAGE_URL: Optional[str] = None
+    OPENAI_IMAGE_API_KEY: Optional[str] = None
+    GOOGLE_IMAGE_API_KEY: Optional[str] = None
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
 
