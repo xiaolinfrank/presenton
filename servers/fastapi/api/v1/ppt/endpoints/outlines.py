@@ -21,6 +21,7 @@ from services.database import get_async_session
 from services.documents_loader import DocumentsLoader
 from utils.llm_calls.generate_presentation_outlines import generate_ppt_outline
 from utils.ppt_utils import get_presentation_title_from_outlines
+from utils.json_parser import parse_json_response
 
 OUTLINES_ROUTER = APIRouter(prefix="/outlines", tags=["Outlines"])
 
@@ -84,9 +85,7 @@ async def stream_outlines(
             presentation_outlines_text += chunk
 
         try:
-            presentation_outlines_json = dict(
-                dirtyjson.loads(presentation_outlines_text)
-            )
+            presentation_outlines_json = parse_json_response(presentation_outlines_text)
         except Exception as e:
             traceback.print_exc()
             yield SSEErrorResponse(

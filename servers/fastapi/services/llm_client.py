@@ -4,6 +4,7 @@ import json
 from typing import AsyncGenerator, List, Optional
 from fastapi import HTTPException
 from openai import AsyncOpenAI
+from utils.json_parser import clean_json_response
 from openai.types.chat.chat_completion_chunk import (
     ChatCompletionChunk as OpenAIChatCompletionChunk,
 )
@@ -570,7 +571,7 @@ class LLMClient:
                 )
         if content:
             if depth == 0:
-                return dict(dirtyjson.loads(content))
+                return dict(dirtyjson.loads(clean_json_response(content)))
             return content
         return None
 
@@ -671,7 +672,7 @@ class LLMClient:
             )
 
         if text_content:
-            return dict(dirtyjson.loads(text_content))
+            return dict(dirtyjson.loads(clean_json_response(text_content)))
         return None
 
     async def _generate_anthropic_structured(

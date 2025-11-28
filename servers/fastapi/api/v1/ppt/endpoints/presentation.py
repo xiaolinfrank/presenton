@@ -8,6 +8,7 @@ import traceback
 from typing import Annotated, List, Literal, Optional, Tuple
 import dirtyjson
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Path
+from utils.json_parser import parse_json_response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -551,9 +552,7 @@ async def generate_presentation_handler(
                 presentation_outlines_text += chunk
 
             try:
-                presentation_outlines_json = dict(
-                    dirtyjson.loads(presentation_outlines_text)
-                )
+                presentation_outlines_json = parse_json_response(presentation_outlines_text)
             except Exception:
                 traceback.print_exc()
                 raise HTTPException(
