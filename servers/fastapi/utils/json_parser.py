@@ -1,4 +1,5 @@
 """Utility for parsing JSON from LLM responses with compatibility for various providers"""
+import re
 import dirtyjson
 
 
@@ -28,6 +29,11 @@ def clean_json_response(text: str) -> str:
         # Remove closing ```
         if cleaned_text.endswith("```"):
             cleaned_text = cleaned_text[:-3].rstrip()
+
+    # Remove trailing commas before closing braces/brackets
+    # This handles cases like: {"key": "value",} or ["item1", "item2",]
+    cleaned_text = re.sub(r',\s*}', '}', cleaned_text)
+    cleaned_text = re.sub(r',\s*]', ']', cleaned_text)
 
     return cleaned_text
 
