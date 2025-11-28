@@ -10,7 +10,7 @@ const Header: React.FC = () => {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/company-logo.png" alt="公司Logo" className="h-10 w-auto" />
+            <img src="/company-logo.jpg" alt="公司Logo" className="h-10 w-auto" />
             <div className="flex flex-col">
               <span className="text-sm font-medium text-gray-900">深圳汇芯生物医疗科技有限公司</span>
               <span className="text-xs text-gray-500">AI 创新及应用部</span>

@@ -147,7 +147,7 @@ export default function Home() {
         {/* Branding Header */}
         <div className="text-center mb-2 mt-4 flex-shrink-0">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <img src="/company-logo.png" alt="公司Logo" className="h-12" />
+            <img src="/company-logo.jpg" alt="公司Logo" className="h-12" />
             <div className="flex flex-col text-left">
               <span className="text-lg font-semibold text-gray-900">深圳汇芯生物医疗科技有限公司</span>
               <span className="text-sm text-gray-600">AI 创新及应用部</span>
