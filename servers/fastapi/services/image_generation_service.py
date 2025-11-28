@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 from models.image_prompt import ImagePrompt
 from models.sql.image_asset import ImageAsset
 from utils.download_helpers import download_file
-from utils.get_env import get_pexels_api_key_env
+from utils.get_env import get_openai_url_env, get_pexels_api_key_env
 from utils.get_env import get_pixabay_api_key_env
 from utils.image_provider import (
     is_image_generation_disabled,
@@ -89,7 +89,8 @@ class ImageGenerationService:
             return "/static/images/placeholder.jpg"
 
     async def generate_image_openai(self, prompt: str, output_directory: str) -> str:
-        client = AsyncOpenAI()
+        openai_url = get_openai_url_env()
+        client = AsyncOpenAI(base_url=openai_url) if openai_url else AsyncOpenAI()
         result = await client.images.generate(
             model="dall-e-3",
             prompt=prompt,
