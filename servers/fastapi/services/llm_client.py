@@ -609,7 +609,15 @@ class LLMClient:
                 )
         if content:
             if depth == 0:
-                return dict(dirtyjson.loads(clean_json_response(content)))
+                cleaned = clean_json_response(content)
+                try:
+                    return dict(dirtyjson.loads(cleaned))
+                except Exception as e:
+                    import logging
+                    logging.error(f"DEBUG: Raw response length: {len(content)}")
+                    logging.error(f"DEBUG: First 1000 chars:\n{content[:1000]}")
+                    logging.error(f"DEBUG: Last 1000 chars:\n{content[-1000:]}")
+                    raise
             return content
         return None
 
