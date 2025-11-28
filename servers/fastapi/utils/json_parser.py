@@ -16,7 +16,19 @@ def clean_json_response(text: str) -> str:
     Returns:
         Cleaned text ready for JSON parsing
     """
+    import logging
+
+    if text is None:
+        logging.warning("[JSON Parser] Received None text, returning empty string")
+        return ""
+
+    if not isinstance(text, str):
+        logging.warning(f"[JSON Parser] Received non-string text: {type(text)}, converting to string")
+        text = str(text)
+
     cleaned_text = text.strip()
+
+    logging.debug(f"[JSON Parser] Input text preview: {text[:200] if len(text) > 200 else text}")
 
     # Remove markdown code block wrappers like ```json...``` or ```...```
     if cleaned_text.startswith("```"):

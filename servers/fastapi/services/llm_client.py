@@ -90,6 +90,17 @@ class LLMClient:
     def disable_thinking(self) -> bool:
         return parse_bool_or_none(get_disable_thinking_env()) or False
 
+    # ? Check if using third-party OpenAI-compatible API
+    def is_third_party_openai_api(self) -> bool:
+        """Check if using a third-party OpenAI-compatible API (like Zhipu, etc.)"""
+        if self.llm_provider != LLMProvider.OPENAI:
+            return False
+        openai_url = get_openai_url_env()
+        if not openai_url:
+            return False
+        # Check if it's NOT the official OpenAI API
+        return "api.openai.com" not in openai_url
+
     # ? Clients
     def _get_client(self):
         match self.llm_provider:
@@ -476,6 +487,8 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+        is_third_party = self.is_third_party_openai_api()
+
         if strict and depth == 0:
             response_schema = ensure_strict_json_schema(
                 response_schema,
@@ -497,32 +510,43 @@ class LLMClient:
                 )
             )
 
+        # Determine response_format based on API type
+        if use_tool_calls_for_structured_output:
+            response_format_param = None
+        elif is_third_party:
+            # Third-party APIs (like Zhipu) may not support json_schema,
+            # use json_object instead for better compatibility
+            response_format_param = {"type": "json_object"}
+        else:
+            # Official OpenAI API - use full json_schema support
+            response_format_param = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ResponseSchema",
+                    "strict": strict,
+                    "schema": response_schema,
+                },
+            }
+
         response = await client.chat.completions.create(
             model=model,
             messages=[message.model_dump() for message in messages],
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
+            response_format=response_format_param,
             max_completion_tokens=max_tokens,
             tools=all_tools,
             extra_body=extra_body,
         )
 
         if len(response.choices) == 0:
+            import logging
+            logging.warning(f"[LLM Debug] No choices in response")
             return None
 
         content = response.choices[0].message.content
+
+        # Debug logging for non-OpenAI providers
+        import logging
+        logging.info(f"[LLM Debug] Raw content type: {type(content)}, content preview: {str(content)[:200] if content else 'None'}")
 
         tool_calls = response.choices[0].message.tool_calls
         has_response_schema = False
@@ -1164,6 +1188,8 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+        is_third_party = self.is_third_party_openai_api()
+
         if strict and depth == 0:
             response_schema = ensure_strict_json_schema(
                 response_schema,
@@ -1186,6 +1212,24 @@ class LLMClient:
                 )
             )
 
+        # Determine response_format based on API type
+        if use_tool_calls_for_structured_output:
+            response_format_param = None
+        elif is_third_party:
+            # Third-party APIs (like Zhipu) may not support json_schema,
+            # use json_object instead for better compatibility
+            response_format_param = {"type": "json_object"}
+        else:
+            # Official OpenAI API - use full json_schema support
+            response_format_param = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ResponseSchema",
+                    "strict": strict,
+                    "schema": response_schema,
+                },
+            }
+
         tool_calls: List[LLMToolCall] = []
         current_index = 0
         current_id = None
@@ -1198,20 +1242,7 @@ class LLMClient:
             messages=[message.model_dump() for message in messages],
             max_completion_tokens=max_tokens,
             tools=all_tools,
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
+            response_format=response_format_param,
             extra_body=extra_body,
             stream=True,
         ):
