@@ -532,7 +532,23 @@ class LLMClient:
         actual_messages = messages
         if is_third_party and depth == 0:
             import json
-            schema_instruction = f"\n\nIMPORTANT: You must respond with valid JSON that exactly matches this schema:\n```json\n{json.dumps(response_schema, indent=2)}\n```\nRespond ONLY with the JSON object, no additional text."
+            # Create a clearer instruction that emphasizes returning DATA, not the schema
+            schema_instruction = f"""
+
+RESPONSE FORMAT INSTRUCTIONS:
+You must respond with a JSON object containing actual data (NOT the schema definition).
+
+The JSON object must follow this structure:
+```json
+{json.dumps(response_schema, indent=2)}
+```
+
+IMPORTANT:
+- Return actual content/data values, NOT schema definitions
+- Do NOT include "$schema", "type", "properties", "description", "minLength", "maxLength" etc.
+- Return ONLY the JSON object with real values
+- Example: if schema has {{"title": {{"type": "string"}}}}, you return {{"title": "Your actual title here"}}
+"""
             # Add schema instruction to the last user message or create a new one
             actual_messages = list(messages)
             if actual_messages and hasattr(actual_messages[-1], 'content'):
@@ -1260,7 +1276,23 @@ class LLMClient:
         actual_messages = messages
         if is_third_party and depth == 0:
             import json
-            schema_instruction = f"\n\nIMPORTANT: You must respond with valid JSON that exactly matches this schema:\n```json\n{json.dumps(response_schema, indent=2)}\n```\nRespond ONLY with the JSON object, no additional text."
+            # Create a clearer instruction that emphasizes returning DATA, not the schema
+            schema_instruction = f"""
+
+RESPONSE FORMAT INSTRUCTIONS:
+You must respond with a JSON object containing actual data (NOT the schema definition).
+
+The JSON object must follow this structure:
+```json
+{json.dumps(response_schema, indent=2)}
+```
+
+IMPORTANT:
+- Return actual content/data values, NOT schema definitions
+- Do NOT include "$schema", "type", "properties", "description", "minLength", "maxLength" etc.
+- Return ONLY the JSON object with real values
+- Example: if schema has {{"title": {{"type": "string"}}}}, you return {{"title": "Your actual title here"}}
+"""
             # Add schema instruction to the last user message or create a new one
             actual_messages = list(messages)
             if actual_messages and hasattr(actual_messages[-1], 'content'):
