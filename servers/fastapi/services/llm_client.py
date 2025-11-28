@@ -614,9 +614,13 @@ class LLMClient:
                     return dict(dirtyjson.loads(cleaned))
                 except Exception as e:
                     import logging
-                    logging.error(f"DEBUG: Raw response length: {len(content)}")
-                    logging.error(f"DEBUG: First 1000 chars:\n{content[:1000]}")
-                    logging.error(f"DEBUG: Last 1000 chars:\n{content[-1000:]}")
+                    import re as re_module
+                    # Extract char position from error message
+                    error_match = re_module.search(r'char (\d+)', str(e))
+                    error_pos = int(error_match.group(1)) if error_match else 0
+                    logging.error(f"DEBUG: Error position: char {error_pos}")
+                    logging.error(f"DEBUG: Content around error (pos {max(0, error_pos-100)} to {error_pos+100}):\n>>>{cleaned[max(0, error_pos-100):error_pos]}<<<ERROR HERE>>>{cleaned[error_pos:error_pos+100]}<<<")
+                    logging.error(f"DEBUG: Full cleaned response:\n{cleaned}")
                     raise
             return content
         return None
