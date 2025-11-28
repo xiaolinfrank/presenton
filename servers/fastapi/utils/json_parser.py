@@ -65,6 +65,15 @@ def clean_json_response(text: str) -> str:
         cleaned_text
     )
 
+    # Fix missing closing brace at end of array (last element)
+    # When LLM forgets to close the parent object before array closing bracket
+    # Pattern: "__icon_query__": "..." } ] -> "__icon_query__": "..." } } ]
+    cleaned_text = re.sub(
+        r'("__(?:icon_query|image_prompt)__"\s*:\s*"[^"]*"\s*\})\s*(\])',
+        r'\1 } \2',
+        cleaned_text
+    )
+
     return cleaned_text
 
 
