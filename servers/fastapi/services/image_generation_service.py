@@ -7,8 +7,14 @@ from openai import AsyncOpenAI
 from models.image_prompt import ImagePrompt
 from models.sql.image_asset import ImageAsset
 from utils.download_helpers import download_file
-from utils.get_env import get_google_url_env, get_openai_url_env, get_pexels_api_key_env
-from utils.get_env import get_pixabay_api_key_env
+from utils.get_env import (
+    get_google_image_model_env,
+    get_google_url_env,
+    get_openai_image_model_env,
+    get_openai_url_env,
+    get_pexels_api_key_env,
+    get_pixabay_api_key_env,
+)
 from utils.image_provider import (
     is_image_generation_disabled,
     is_pixels_selected,
@@ -91,8 +97,9 @@ class ImageGenerationService:
     async def generate_image_openai(self, prompt: str, output_directory: str) -> str:
         openai_url = get_openai_url_env()
         client = AsyncOpenAI(base_url=openai_url) if openai_url else AsyncOpenAI()
+        model = get_openai_image_model_env() or "dall-e-3"
         result = await client.images.generate(
-            model="dall-e-3",
+            model=model,
             prompt=prompt,
             n=1,
             quality="standard",
@@ -104,9 +111,10 @@ class ImageGenerationService:
     async def generate_image_google(self, prompt: str, output_directory: str) -> str:
         google_url = get_google_url_env()
         client = genai.Client(http_options={'api_endpoint': google_url}) if google_url else genai.Client()
+        model = get_google_image_model_env() or "gemini-2.5-flash-image-preview"
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.5-flash-image-preview",
+            model=model,
             contents=[prompt],
             config=GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
         )

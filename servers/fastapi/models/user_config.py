@@ -31,6 +31,8 @@ class UserConfig(BaseModel):
     # Image Provider
     DISABLE_IMAGE_GENERATION: Optional[bool] = None
     IMAGE_PROVIDER: Optional[str] = None
+    OPENAI_IMAGE_MODEL: Optional[str] = None
+    GOOGLE_IMAGE_MODEL: Optional[str] = None
     PEXELS_API_KEY: Optional[str] = None
     PIXABAY_API_KEY: Optional[str] = None
 

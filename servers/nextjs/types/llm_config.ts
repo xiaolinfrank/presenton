@@ -27,6 +27,8 @@ export interface LLMConfig {
   // Image providers
   DISABLE_IMAGE_GENERATION?: boolean;
   IMAGE_PROVIDER?: string;
+  OPENAI_IMAGE_MODEL?: string;
+  GOOGLE_IMAGE_MODEL?: string;
   PEXELS_API_KEY?: string;
   PIXABAY_API_KEY?: string;
 
