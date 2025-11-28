@@ -9,8 +9,10 @@ from models.sql.image_asset import ImageAsset
 from utils.download_helpers import download_file
 from utils.get_env import (
     get_google_image_model_env,
+    get_google_image_url_env,
     get_google_url_env,
     get_openai_image_model_env,
+    get_openai_image_url_env,
     get_openai_url_env,
     get_pexels_api_key_env,
     get_pixabay_api_key_env,
@@ -95,7 +97,7 @@ class ImageGenerationService:
             return "/static/images/placeholder.jpg"
 
     async def generate_image_openai(self, prompt: str, output_directory: str) -> str:
-        openai_url = get_openai_url_env()
+        openai_url = get_openai_image_url_env() or get_openai_url_env()
         client = AsyncOpenAI(base_url=openai_url) if openai_url else AsyncOpenAI()
         model = get_openai_image_model_env() or "dall-e-3"
         result = await client.images.generate(
@@ -109,7 +111,7 @@ class ImageGenerationService:
         return await download_file(image_url, output_directory)
 
     async def generate_image_google(self, prompt: str, output_directory: str) -> str:
-        google_url = get_google_url_env()
+        google_url = get_google_image_url_env() or get_google_url_env()
         client = genai.Client(http_options={'api_endpoint': google_url}) if google_url else genai.Client()
         model = get_google_image_model_env() or "gemini-2.5-flash-image-preview"
         response = await asyncio.to_thread(
