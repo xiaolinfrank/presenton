@@ -16,29 +16,28 @@ async def download_file(
         os.makedirs(save_directory, exist_ok=True)
 
         parsed_url = urlparse(url)
-        filename = os.path.basename(parsed_url.path)
+        original_filename = os.path.basename(parsed_url.path)
 
-        if not filename or "." not in filename:
+        # Always use UUID for unique filename, but preserve the extension
+        extension = ""
+        if original_filename and "." in original_filename:
+            extension = os.path.splitext(original_filename)[1]
+
+        if not extension:
+            # Try to get extension from Content-Type header
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.head(url, headers=headers) as response:
                     if response.status == 200:
-                        content_disposition = response.headers.get(
-                            "Content-Disposition", ""
-                        )
-                        if "filename=" in content_disposition:
-                            filename = content_disposition.split("filename=")[1].strip(
-                                "\"'"
+                        content_type = response.headers.get("Content-Type", "")
+                        if content_type:
+                            guessed_ext = mimetypes.guess_extension(
+                                content_type.split(";")[0]
                             )
-                        else:
-                            content_type = response.headers.get("Content-Type", "")
-                            if content_type:
-                                extension = mimetypes.guess_extension(
-                                    content_type.split(";")[0]
-                                )
-                                if extension:
-                                    filename = f"{uuid.uuid4()}{extension}"
+                            if guessed_ext:
+                                extension = guessed_ext
 
-        filename = filename or str(uuid.uuid4())
+        # Generate unique filename with UUID
+        filename = f"{uuid.uuid4()}{extension or '.png'}"
         save_path = os.path.join(save_directory, filename)
 
         async with aiohttp.ClientSession(trust_env=True) as session:

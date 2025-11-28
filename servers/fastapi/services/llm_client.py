@@ -90,6 +90,17 @@ class LLMClient:
     def disable_thinking(self) -> bool:
         return parse_bool_or_none(get_disable_thinking_env()) or False
 
+    # ? Check if using third-party OpenAI-compatible API
+    def is_third_party_openai_api(self) -> bool:
+        """Check if using a third-party OpenAI-compatible API (like Zhipu, etc.)"""
+        if self.llm_provider != LLMProvider.OPENAI:
+            return False
+        openai_url = get_openai_url_env()
+        if not openai_url:
+            return False
+        # Check if it's NOT the official OpenAI API
+        return "api.openai.com" not in openai_url
+
     # ? Clients
     def _get_client(self):
         match self.llm_provider:
@@ -476,6 +487,8 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+        is_third_party = self.is_third_party_openai_api()
+
         if strict and depth == 0:
             response_schema = ensure_strict_json_schema(
                 response_schema,
@@ -497,32 +510,73 @@ class LLMClient:
                 )
             )
 
+        # Determine response_format based on API type
+        if use_tool_calls_for_structured_output:
+            response_format_param = None
+        elif is_third_party:
+            # Third-party APIs (like Zhipu) may not support json_schema,
+            # use json_object instead for better compatibility
+            response_format_param = {"type": "json_object"}
+        else:
+            # Official OpenAI API - use full json_schema support
+            response_format_param = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ResponseSchema",
+                    "strict": strict,
+                    "schema": response_schema,
+                },
+            }
+
+        # For third-party APIs, inject schema into messages since they don't support json_schema
+        actual_messages = messages
+        if is_third_party and depth == 0:
+            import json
+            # Create a clearer instruction that emphasizes returning DATA, not the schema
+            schema_instruction = f"""
+
+RESPONSE FORMAT INSTRUCTIONS:
+You must respond with a JSON object containing actual data (NOT the schema definition).
+
+The JSON object must follow this structure:
+```json
+{json.dumps(response_schema, indent=2)}
+```
+
+IMPORTANT:
+- Return actual content/data values, NOT schema definitions
+- Do NOT include "$schema", "type", "properties", "description", "minLength", "maxLength" etc.
+- Return ONLY the JSON object with real values
+- Example: if schema has {{"title": {{"type": "string"}}}}, you return {{"title": "Your actual title here"}}
+"""
+            # Add schema instruction to the last user message or create a new one
+            actual_messages = list(messages)
+            if actual_messages and hasattr(actual_messages[-1], 'content'):
+                last_msg = actual_messages[-1]
+                actual_messages[-1] = type(last_msg)(
+                    role=last_msg.role,
+                    content=last_msg.content + schema_instruction
+                )
+
         response = await client.chat.completions.create(
             model=model,
-            messages=[message.model_dump() for message in messages],
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
+            messages=[message.model_dump() for message in actual_messages],
+            response_format=response_format_param,
             max_completion_tokens=max_tokens,
             tools=all_tools,
             extra_body=extra_body,
         )
 
         if len(response.choices) == 0:
+            import logging
+            logging.warning(f"[LLM Debug] No choices in response")
             return None
 
         content = response.choices[0].message.content
+
+        # Debug logging for non-OpenAI providers
+        import logging
+        logging.info(f"[LLM Debug] Raw content type: {type(content)}, content preview: {str(content)[:200] if content else 'None'}")
 
         tool_calls = response.choices[0].message.tool_calls
         has_response_schema = False
@@ -571,7 +625,19 @@ class LLMClient:
                 )
         if content:
             if depth == 0:
-                return dict(dirtyjson.loads(clean_json_response(content)))
+                cleaned = clean_json_response(content)
+                try:
+                    return dict(dirtyjson.loads(cleaned))
+                except Exception as e:
+                    import logging
+                    import re as re_module
+                    # Extract char position from error message
+                    error_match = re_module.search(r'char (\d+)', str(e))
+                    error_pos = int(error_match.group(1)) if error_match else 0
+                    logging.error(f"DEBUG: Error position: char {error_pos}")
+                    logging.error(f"DEBUG: Content around error (pos {max(0, error_pos-100)} to {error_pos+100}):\n>>>{cleaned[max(0, error_pos-100):error_pos]}<<<ERROR HERE>>>{cleaned[error_pos:error_pos+100]}<<<")
+                    logging.error(f"DEBUG: Full cleaned response:\n{cleaned}")
+                    raise
             return content
         return None
 
@@ -1164,6 +1230,8 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+        is_third_party = self.is_third_party_openai_api()
+
         if strict and depth == 0:
             response_schema = ensure_strict_json_schema(
                 response_schema,
@@ -1186,6 +1254,54 @@ class LLMClient:
                 )
             )
 
+        # Determine response_format based on API type
+        if use_tool_calls_for_structured_output:
+            response_format_param = None
+        elif is_third_party:
+            # Third-party APIs (like Zhipu) may not support json_schema,
+            # use json_object instead for better compatibility
+            response_format_param = {"type": "json_object"}
+        else:
+            # Official OpenAI API - use full json_schema support
+            response_format_param = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ResponseSchema",
+                    "strict": strict,
+                    "schema": response_schema,
+                },
+            }
+
+        # For third-party APIs, inject schema into messages since they don't support json_schema
+        actual_messages = messages
+        if is_third_party and depth == 0:
+            import json
+            # Create a clearer instruction that emphasizes returning DATA, not the schema
+            schema_instruction = f"""
+
+RESPONSE FORMAT INSTRUCTIONS:
+You must respond with a JSON object containing actual data (NOT the schema definition).
+
+The JSON object must follow this structure:
+```json
+{json.dumps(response_schema, indent=2)}
+```
+
+IMPORTANT:
+- Return actual content/data values, NOT schema definitions
+- Do NOT include "$schema", "type", "properties", "description", "minLength", "maxLength" etc.
+- Return ONLY the JSON object with real values
+- Example: if schema has {{"title": {{"type": "string"}}}}, you return {{"title": "Your actual title here"}}
+"""
+            # Add schema instruction to the last user message or create a new one
+            actual_messages = list(messages)
+            if actual_messages and hasattr(actual_messages[-1], 'content'):
+                last_msg = actual_messages[-1]
+                actual_messages[-1] = type(last_msg)(
+                    role=last_msg.role,
+                    content=last_msg.content + schema_instruction
+                )
+
         tool_calls: List[LLMToolCall] = []
         current_index = 0
         current_id = None
@@ -1195,23 +1311,10 @@ class LLMClient:
         has_response_schema_tool_call = False
         async for event in await client.chat.completions.create(
             model=model,
-            messages=[message.model_dump() for message in messages],
+            messages=[message.model_dump() for message in actual_messages],
             max_completion_tokens=max_tokens,
             tools=all_tools,
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
+            response_format=response_format_param,
             extra_body=extra_body,
             stream=True,
         ):
