@@ -246,16 +246,20 @@ class ImageGenerationService:
                     error_text = await response.text()
                     raise Exception(f"API request failed with status {response.status}: {error_text}")
 
-                # Process streaming response (SSE format)
-                async for line in response.content:
-                    line = line.decode('utf-8').strip()
+                # Read entire response and process SSE format
+                # Cannot use line-by-line iteration because base64 image chunks are very large
+                full_response = await response.text()
+
+                # Split by SSE event boundaries (data: prefix)
+                for line in full_response.split('\n'):
+                    line = line.strip()
                     if not line:
                         continue
                     # Handle SSE format: data: {...}
                     if line.startswith("data: "):
                         line = line[6:]  # Remove "data: " prefix
                     if line == "[DONE]":
-                        break
+                        continue
                     try:
                         chunk = json.loads(line)
                         if "choices" in chunk and len(chunk["choices"]) > 0:
