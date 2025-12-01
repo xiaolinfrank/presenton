@@ -51,9 +51,13 @@ const DashboardPage: React.FC = () => {
       <Wrapper>
         <main className="container mx-auto px-4 py-8">
           <section>
-            <h2 className="text-2xl font-roboto font-medium mb-6">
+            <h2 className="text-2xl font-roboto font-medium mb-4">
               演示文稿
             </h2>
+            <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+              <span className="font-medium">提示：</span>
+              您的数据通过浏览器标识保存，无法跨设备同步。清除浏览器缓存或更换浏览器将无法访问之前创建的演示文稿。
+            </div>
             <PresentationGrid
               presentations={presentations}
               type="slide"

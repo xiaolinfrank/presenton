@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+from sqlalchemy import text
 from sqlmodel import SQLModel
 
 from models.sql.async_presentation_generation_status import (
@@ -48,6 +49,28 @@ async def get_container_db_async_session() -> AsyncGenerator[AsyncSession, None]
         yield session
 
 
+# Database migrations
+async def run_migrations(conn):
+    """Run database migrations to add new columns to existing tables."""
+    # Check if user_id column exists in presentations table
+    try:
+        result = await conn.execute(text("PRAGMA table_info(presentations)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if "user_id" not in columns:
+            print("Adding user_id column to presentations table...")
+            await conn.execute(
+                text("ALTER TABLE presentations ADD COLUMN user_id VARCHAR")
+            )
+            # Create index for user_id
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_presentations_user_id ON presentations(user_id)")
+            )
+            print("user_id column added successfully.")
+    except Exception as e:
+        print(f"Migration check/run encountered an issue: {e}")
+
+
 # Create Database and Tables
 async def create_db_and_tables():
     async with sql_engine.begin() as conn:
@@ -66,6 +89,10 @@ async def create_db_and_tables():
                 ],
             )
         )
+
+    # Run migrations for existing databases
+    async with sql_engine.begin() as conn:
+        await run_migrations(conn)
 
     async with container_db_engine.begin() as conn:
         await conn.run_sync(

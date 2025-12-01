@@ -7,7 +7,7 @@ import random
 import traceback
 from typing import Annotated, List, Literal, Optional, Tuple
 import dirtyjson
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Path
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Path
 from utils.json_parser import parse_json_response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
@@ -72,8 +72,16 @@ import uuid
 PRESENTATION_ROUTER = APIRouter(prefix="/presentation", tags=["Presentation"])
 
 
+def get_user_id(x_user_id: Optional[str] = Header(None)) -> Optional[str]:
+    """Extract user ID from X-User-Id header"""
+    return x_user_id
+
+
 @PRESENTATION_ROUTER.get("/all", response_model=List[PresentationWithSlides])
-async def get_all_presentations(sql_session: AsyncSession = Depends(get_async_session)):
+async def get_all_presentations(
+    user_id: Optional[str] = Depends(get_user_id),
+    sql_session: AsyncSession = Depends(get_async_session),
+):
     presentations_with_slides = []
 
     query = (
@@ -82,8 +90,13 @@ async def get_all_presentations(sql_session: AsyncSession = Depends(get_async_se
             SlideModel,
             (SlideModel.presentation == PresentationModel.id) & (SlideModel.index == 0),
         )
-        .order_by(PresentationModel.created_at.desc())
     )
+
+    # Filter by user_id if provided
+    if user_id:
+        query = query.where(PresentationModel.user_id == user_id)
+
+    query = query.order_by(PresentationModel.created_at.desc())
 
     results = await sql_session.execute(query)
     rows = results.all()
@@ -99,11 +112,18 @@ async def get_all_presentations(sql_session: AsyncSession = Depends(get_async_se
 
 @PRESENTATION_ROUTER.get("/{id}", response_model=PresentationWithSlides)
 async def get_presentation(
-    id: uuid.UUID, sql_session: AsyncSession = Depends(get_async_session)
+    id: uuid.UUID,
+    user_id: Optional[str] = Depends(get_user_id),
+    sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
     if not presentation:
         raise HTTPException(404, "Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
+
     slides = await sql_session.scalars(
         select(SlideModel)
         .where(SlideModel.presentation == id)
@@ -117,11 +137,17 @@ async def get_presentation(
 
 @PRESENTATION_ROUTER.delete("/{id}", status_code=204)
 async def delete_presentation(
-    id: uuid.UUID, sql_session: AsyncSession = Depends(get_async_session)
+    id: uuid.UUID,
+    user_id: Optional[str] = Depends(get_user_id),
+    sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
     if not presentation:
         raise HTTPException(404, "Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     await sql_session.delete(presentation)
     await sql_session.commit()
@@ -139,6 +165,7 @@ async def create_presentation(
     include_table_of_contents: Annotated[bool, Body()] = False,
     include_title_slide: Annotated[bool, Body()] = True,
     web_search: Annotated[bool, Body()] = False,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
 
@@ -152,6 +179,7 @@ async def create_presentation(
 
     presentation = PresentationModel(
         id=presentation_id,
+        user_id=user_id,
         content=content,
         n_slides=n_slides,
         language=language,
@@ -176,6 +204,7 @@ async def prepare_presentation(
     outlines: Annotated[List[SlideOutlineModel], Body()],
     layout: Annotated[PresentationLayoutModel, Body()],
     title: Annotated[Optional[str], Body()] = None,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     if not outlines:
@@ -184,6 +213,10 @@ async def prepare_presentation(
     presentation = await sql_session.get(PresentationModel, presentation_id)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     presentation_outline_model = PresentationOutlineModel(slides=outlines)
 
@@ -258,11 +291,18 @@ async def prepare_presentation(
 
 @PRESENTATION_ROUTER.get("/stream/{id}", response_model=PresentationWithSlides)
 async def stream_presentation(
-    id: uuid.UUID, sql_session: AsyncSession = Depends(get_async_session)
+    id: uuid.UUID,
+    user_id: Optional[str] = Depends(get_user_id),
+    sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
+
     if not presentation.structure:
         raise HTTPException(
             status_code=400,
@@ -368,11 +408,16 @@ async def update_presentation(
     n_slides: Annotated[Optional[int], Body()] = None,
     title: Annotated[Optional[str], Body()] = None,
     slides: Annotated[Optional[List[SlideModel]], Body()] = None,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     presentation_update_dict = {}
     if n_slides:
@@ -426,12 +471,17 @@ async def export_presentation_as_pptx_or_pdf(
     export_as: Annotated[
         Literal["pptx", "pdf"], Body(description="Format to export the presentation as")
     ] = "pptx",
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
 
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     presentation_and_path = await export_presentation(
         id,
@@ -493,6 +543,7 @@ async def generate_presentation_handler(
     presentation_id: uuid.UUID,
     async_status: Optional[AsyncPresentationGenerationTaskModel],
     sql_session: AsyncSession = Depends(get_async_session),
+    user_id: Optional[str] = None,
 ):
     try:
         using_slides_markdown = False
@@ -650,6 +701,7 @@ async def generate_presentation_handler(
         # Create PresentationModel
         presentation = PresentationModel(
             id=presentation_id,
+            user_id=user_id,
             content=request.content,
             n_slides=request.n_slides,
             language=request.language,
@@ -803,12 +855,13 @@ async def generate_presentation_handler(
 @PRESENTATION_ROUTER.post("/generate", response_model=PresentationPathAndEditPath)
 async def generate_presentation_sync(
     request: GeneratePresentationRequest,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     try:
         (presentation_id,) = await check_if_api_request_is_valid(request, sql_session)
         return await generate_presentation_handler(
-            request, presentation_id, None, sql_session
+            request, presentation_id, None, sql_session, user_id
         )
     except Exception:
         traceback.print_exc()
@@ -821,6 +874,7 @@ async def generate_presentation_sync(
 async def generate_presentation_async(
     request: GeneratePresentationRequest,
     background_tasks: BackgroundTasks,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     try:
@@ -840,6 +894,7 @@ async def generate_presentation_async(
             presentation_id,
             async_status=async_status,
             sql_session=sql_session,
+            user_id=user_id,
         )
         return async_status
 
@@ -869,11 +924,16 @@ async def check_async_presentation_generation_status(
 @PRESENTATION_ROUTER.post("/edit", response_model=PresentationPathAndEditPath)
 async def edit_presentation_with_new_content(
     data: Annotated[EditPresentationRequest, Body()],
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, data.presentation_id)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     slides = await sql_session.scalars(
         select(SlideModel).where(SlideModel.presentation == data.presentation_id)
@@ -913,11 +973,16 @@ async def edit_presentation_with_new_content(
 @PRESENTATION_ROUTER.post("/derive", response_model=PresentationPathAndEditPath)
 async def derive_presentation_from_existing_one(
     data: Annotated[EditPresentationRequest, Body()],
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, data.presentation_id)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(403, "Access denied")
 
     slides = await sql_session.scalars(
         select(SlideModel).where(SlideModel.presentation == data.presentation_id)

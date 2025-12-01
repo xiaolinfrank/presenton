@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
@@ -18,10 +18,16 @@ import uuid
 SLIDE_ROUTER = APIRouter(prefix="/slide", tags=["Slide"])
 
 
+def get_user_id(x_user_id: Optional[str] = Header(None)) -> Optional[str]:
+    """Extract user ID from X-User-Id header"""
+    return x_user_id
+
+
 @SLIDE_ROUTER.post("/edit")
 async def edit_slide(
     id: Annotated[uuid.UUID, Body()],
     prompt: Annotated[str, Body()],
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     slide = await sql_session.get(SlideModel, id)
@@ -30,6 +36,10 @@ async def edit_slide(
     presentation = await sql_session.get(PresentationModel, slide.presentation)
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
+
+    # Check if presentation belongs to the user (if user_id is provided)
+    if user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     presentation_layout = presentation.get_layout()
     slide_layout = await get_slide_layout_from_prompt(
@@ -67,11 +77,17 @@ async def edit_slide_html(
     id: Annotated[uuid.UUID, Body()],
     prompt: Annotated[str, Body()],
     html: Annotated[Optional[str], Body()] = None,
+    user_id: Optional[str] = Depends(get_user_id),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     slide = await sql_session.get(SlideModel, id)
     if not slide:
         raise HTTPException(status_code=404, detail="Slide not found")
+
+    # Verify user has access to the presentation that owns this slide
+    presentation = await sql_session.get(PresentationModel, slide.presentation)
+    if presentation and user_id and presentation.user_id and presentation.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     html_to_edit = html or slide.html_content
     if not html_to_edit:

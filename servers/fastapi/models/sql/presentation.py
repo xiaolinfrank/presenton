@@ -14,6 +14,7 @@ class PresentationModel(SQLModel, table=True):
     __tablename__ = "presentations"
 
     id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    user_id: Optional[str] = Field(sa_column=Column(String, index=True), default=None)
     content: str
     n_slides: int
     language: str
@@ -45,6 +46,7 @@ class PresentationModel(SQLModel, table=True):
     def get_new_presentation(self):
         return PresentationModel(
             id=uuid.uuid4(),
+            user_id=self.user_id,
             content=self.content,
             n_slides=self.n_slides,
             language=self.language,

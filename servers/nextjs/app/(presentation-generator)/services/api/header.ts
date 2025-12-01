@@ -1,17 +1,33 @@
+import { getUserId } from "@/app/(presentation-generator)/services/user-id";
+
 export const getHeader = () => {
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Accept: "application/json",  
+    Accept: "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-User-Id",
   };
+
+  const userId = getUserId();
+  if (userId) {
+    headers["X-User-Id"] = userId;
+  }
+
+  return headers;
 };
 
 export const getHeaderForFormData = () => {
-  return {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-User-Id",
   };
+
+  const userId = getUserId();
+  if (userId) {
+    headers["X-User-Id"] = userId;
+  }
+
+  return headers;
 };
