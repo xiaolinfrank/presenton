@@ -278,7 +278,6 @@ const ImageGenerationPage: React.FC = () => {
           try {
             const base64 = await imageUrlToBase64(successfulImage.url);
             if (base64) {
-              console.log("Converted image to base64, length:", base64.length);
               // Use OpenAI-compatible multimodal format
               messages.push({
                 role: "assistant",
@@ -289,11 +288,9 @@ const ImageGenerationPage: React.FC = () => {
                   }
                 ],
               });
-            } else {
-              console.warn("Failed to convert image to base64, skipping");
             }
           } catch (error) {
-            console.error("Error converting image to base64:", error);
+            // Skip this image if conversion fails
           }
         }
       }
@@ -390,13 +387,6 @@ const ImageGenerationPage: React.FC = () => {
     // Build conversation history (this converts images to base64)
     // Pass userMessage.id to exclude the current user message (we add it with enhanced prompt)
     const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt, userMessage.id);
-    console.log(`Multi-turn chat: ${conversationHistory.length} messages in history`);
-    console.log("Conversation history:", JSON.stringify(conversationHistory.map(m => ({
-      role: m.role,
-      contentType: typeof m.content === 'string' ? 'string' : 'array',
-      contentLength: typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length,
-      contentPreview: typeof m.content === 'string' ? m.content.substring(0, 200) : '[multimodal content]'
-    })), null, 2));
 
     // Generate images in parallel using multi-turn API
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
@@ -470,16 +460,8 @@ const ImageGenerationPage: React.FC = () => {
       Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
     );
 
-    console.log("Generation results:", results);
-    console.log("Results length:", results.length);
-
     const completedImages = results.filter((img): img is GeneratedImage => img !== null);
     const successfulImages = completedImages.filter(img => !img.error);
-
-    console.log("Completed images:", completedImages.length);
-    console.log("Successful images:", successfulImages.length);
-    console.log("Error images:", completedImages.filter(img => img.error).length);
-    console.log("Completed images details:", JSON.stringify(completedImages, null, 2));
 
     // Update the assistant message with results
     const finalSessions = updatedSessions.map(s => {
@@ -504,10 +486,6 @@ const ImageGenerationPage: React.FC = () => {
       }
       return s;
     });
-    // Log the final message being saved
-    const finalMessage = finalSessions.find(s => s.id === sessionId)?.messages.find(m => m.id === loadingMessageId);
-    console.log("Final message images:", finalMessage?.images?.length);
-    console.log("Final message isLoading:", finalMessage?.isLoading);
 
     saveSessions(finalSessions);
 
@@ -561,9 +539,24 @@ const ImageGenerationPage: React.FC = () => {
     const enhancedPrompt = `${failedImage.prompt}（图像比例 ${failedImage.aspectRatio}）`;
 
     // Get the current session's existing messages for conversation history
+    // We need to exclude:
+    // 1. The assistant message that contains the failed image
+    // 2. The user message that triggered that failed generation
     const existingMessages = currentSession?.messages.filter(m => !m.isLoading) || [];
+
+    // Find the message containing the failed image
+    const failedMessageIndex = existingMessages.findIndex(m =>
+      m.images?.some(img => img.id === failedImage.id)
+    );
+
+    // Exclude the failed assistant message and the user message before it
+    // Also don't include any messages with only failed images
+    const messagesForHistory = failedMessageIndex > 0
+      ? existingMessages.slice(0, failedMessageIndex - 1)  // Exclude both user msg and failed assistant msg
+      : [];
+
     const conversationHistory = await buildConversationHistory(
-      existingMessages.slice(0, -1), // Exclude the last assistant message with the failed image
+      messagesForHistory,
       enhancedPrompt
     );
 
