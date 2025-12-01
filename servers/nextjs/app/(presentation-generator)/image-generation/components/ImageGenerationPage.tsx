@@ -447,8 +447,15 @@ const ImageGenerationPage: React.FC = () => {
       Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
     );
 
+    console.log("Generation results:", results);
+    console.log("Results length:", results.length);
+
     const completedImages = results.filter((img): img is GeneratedImage => img !== null);
     const successfulImages = completedImages.filter(img => !img.error);
+
+    console.log("Completed images:", completedImages.length);
+    console.log("Successful images:", successfulImages.length);
+    console.log("Error images:", completedImages.filter(img => img.error).length);
 
     // Update the assistant message with results
     const finalSessions = updatedSessions.map(s => {
