@@ -269,15 +269,24 @@ const ImageGenerationPage: React.FC = () => {
           content: msg.content,
         });
       } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
-        // TODO: For now, skip including images in history until we figure out the correct format
-        // The API might not accept markdown format for images
-        // For assistant messages with images, just add a placeholder text
+        // For assistant messages with images, convert first successful image to base64
+        // Use the same markdown format as API returns: ![image](data:image/png;base64,...)
         const successfulImage = msg.images.find(img => img.url && !img.error);
         if (successfulImage) {
-          messages.push({
-            role: "assistant",
-            content: "[已生成图像]",
-          });
+          try {
+            const base64 = await imageUrlToBase64(successfulImage.url);
+            if (base64) {
+              console.log("Converted image to base64, length:", base64.length);
+              messages.push({
+                role: "assistant",
+                content: `![image](${base64})`,
+              });
+            } else {
+              console.warn("Failed to convert image to base64, skipping");
+            }
+          } catch (error) {
+            console.error("Error converting image to base64:", error);
+          }
         }
       }
     }
