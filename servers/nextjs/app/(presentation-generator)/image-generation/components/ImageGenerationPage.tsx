@@ -31,6 +31,8 @@ import {
   Zap,
   Palette,
   Bot,
+  Paperclip,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -38,47 +40,23 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import {
+  imageSessionStorage,
+  type ChatSession,
+  type ChatMessage,
+  type GeneratedImage,
+  type ImageGenerationConfig,
+} from "../lib/imageSessionStorage";
 
-// Types
-interface ChatMessage {
+// Local types (not exported from lib)
+interface ReferenceImage {
   id: string;
-  role: "user" | "assistant";
-  content: string;
-  images?: GeneratedImage[];
-  timestamp: string;
-  isLoading?: boolean;
-}
-
-interface GeneratedImage {
-  id: string;
-  url: string;
-  prompt: string;
-  model: string;
-  aspectRatio: string;
-  resolution: string;
-  createdAt: string;
-  isLoading?: boolean;
-  error?: string;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  config: ImageGenerationConfig;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ImageGenerationConfig {
-  model: string;
-  count: number;
-  aspectRatio: string;
-  resolution: string;
+  file: File;
+  previewUrl: string;
+  base64?: string;
 }
 
 // Constants
-const STORAGE_KEY = "presenton_image_chat_sessions";
 
 const MODELS = [
   {
@@ -146,39 +124,41 @@ const ImageGenerationPage: React.FC = () => {
   const [config, setConfig] = useState<ImageGenerationConfig>(DEFAULT_CONFIG);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [previewReferenceImage, setPreviewReferenceImage] = useState<string | null>(null);  // base64 of reference image to preview
   const [showSettings, setShowSettings] = useState(true);
+  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get current session
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  // Load sessions from localStorage on mount
+  // Load sessions from IndexedDB on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setSessions(parsed);
+    const loadSessions = async () => {
+      try {
+        const storedSessions = await imageSessionStorage.getAllSessions();
+        setSessions(storedSessions);
         // Auto-select the most recent session if exists
-        if (parsed.length > 0) {
-          setCurrentSessionId(parsed[0].id);
-          setConfig(parsed[0].config);
+        if (storedSessions.length > 0) {
+          setCurrentSessionId(storedSessions[0].id);
+          setConfig(storedSessions[0].config);
         }
+      } catch (error) {
+        console.error("Failed to load sessions:", error);
       }
-    } catch (error) {
-      console.error("Failed to load sessions:", error);
-    }
+    };
+    loadSessions();
   }, []);
 
-  // Save sessions to localStorage
+  // Save sessions to IndexedDB
   const saveSessions = useCallback((newSessions: ChatSession[]) => {
-    // Always update React state first, regardless of localStorage success
+    // Always update React state first
     setSessions(newSessions);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
-    } catch (error) {
-      console.error("Failed to save sessions to localStorage:", error);
-    }
+    // Save to IndexedDB asynchronously (no quota issues with IndexedDB)
+    imageSessionStorage.saveSessions(newSessions).catch(error => {
+      console.error("Failed to save sessions to IndexedDB:", error);
+    });
   }, []);
 
   // Scroll to bottom when messages change
@@ -233,6 +213,74 @@ const ImageGenerationPage: React.FC = () => {
     setConfig(prev => ({ ...prev, [key]: value }));
   }, []);
 
+  // Handle reference image upload
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newImages: ReferenceImage[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} 不是有效的图像文件`);
+        continue;
+      }
+
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} 文件大小超过 10MB`);
+        continue;
+      }
+
+      const previewUrl = URL.createObjectURL(file);
+
+      // Convert to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      newImages.push({
+        id: `ref-${Date.now()}-${i}`,
+        file,
+        previewUrl,
+        base64,
+      });
+    }
+
+    if (newImages.length > 0) {
+      setReferenceImages(prev => [...prev, ...newImages]);
+      toast.success(`已添加 ${newImages.length} 张参考图像`);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  // Remove reference image
+  const handleRemoveReferenceImage = useCallback((imageId: string) => {
+    setReferenceImages(prev => {
+      const image = prev.find(img => img.id === imageId);
+      if (image) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+      return prev.filter(img => img.id !== imageId);
+    });
+  }, []);
+
+  // Clear all reference images
+  const handleClearReferenceImages = useCallback(() => {
+    referenceImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+    setReferenceImages([]);
+  }, [referenceImages]);
+
   // Helper function to convert image URL to base64
   const imageUrlToBase64 = async (url: string): Promise<string> => {
     try {
@@ -257,7 +305,8 @@ const ImageGenerationPage: React.FC = () => {
   const buildConversationHistory = async (
     sessionMessages: ChatMessage[],
     newPrompt: string,
-    currentUserMessageId?: string  // ID of current user message to exclude
+    currentUserMessageId?: string,  // ID of current user message to exclude
+    refImages?: ReferenceImage[]    // Reference images to include
   ): Promise<Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}>> => {
     const messages: Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}> = [];
 
@@ -303,11 +352,38 @@ const ImageGenerationPage: React.FC = () => {
       }
     }
 
-    // Add the new user message
-    messages.push({
-      role: "user",
-      content: newPrompt,
-    });
+    // Add the new user message with optional reference images
+    if (refImages && refImages.length > 0) {
+      // Build multimodal content with reference images + text prompt
+      const userContent: Array<{type: string; text?: string; image_url?: {url: string}}> = [];
+
+      // Add reference images first
+      for (const refImg of refImages) {
+        if (refImg.base64) {
+          userContent.push({
+            type: "image_url",
+            image_url: { url: refImg.base64 }
+          });
+        }
+      }
+
+      // Add text prompt
+      userContent.push({
+        type: "text",
+        text: newPrompt
+      });
+
+      messages.push({
+        role: "user",
+        content: userContent,
+      });
+    } else {
+      // Simple text-only message
+      messages.push({
+        role: "user",
+        content: newPrompt,
+      });
+    }
 
     return messages;
   };
@@ -343,11 +419,16 @@ const ImageGenerationPage: React.FC = () => {
     // Build the enhanced prompt with aspect ratio
     const enhancedPrompt = `${currentPrompt}（图像比例 ${currentConfig.aspectRatio}）`;
 
-    // Add user message
+    // Add user message (track reference image count and base64s for retry)
+    const refBase64s = referenceImages.length > 0
+      ? referenceImages.map(img => img.base64).filter((b): b is string => !!b)
+      : undefined;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-user`,
       role: "user",
       content: currentPrompt,
+      referenceImageCount: referenceImages.length > 0 ? referenceImages.length : undefined,
+      referenceImageBase64s: refBase64s,
       timestamp: new Date().toISOString(),
     };
 
@@ -393,7 +474,12 @@ const ImageGenerationPage: React.FC = () => {
 
     // Build conversation history (this converts images to base64)
     // Pass userMessage.id to exclude the current user message (we add it with enhanced prompt)
-    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt, userMessage.id);
+    // Include reference images if any
+    const currentRefImages = [...referenceImages];
+    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt, userMessage.id, currentRefImages);
+
+    // Clear reference images after starting generation
+    handleClearReferenceImages();
 
     // Generate images in parallel using multi-turn API
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
@@ -485,31 +571,39 @@ const ImageGenerationPage: React.FC = () => {
       }];
     }
 
-    // Update the assistant message with results
-    const finalSessions = updatedSessions.map(s => {
-      if (s.id === sessionId) {
-        return {
-          ...s,
-          messages: s.messages.map(m => {
-            if (m.id === loadingMessageId) {
-              return {
-                ...m,
-                content: successfulImages.length > 0
-                  ? `已生成 ${successfulImages.length} 张图像`
-                  : "图像生成失败",
-                images: completedImages,
-                isLoading: false,
-              };
-            }
-            return m;
-          }),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return s;
-    });
+    // Update the assistant message with results using functional update
+    // This ensures we're working with the latest state
+    setSessions(currentSessions => {
+      const finalSessions = currentSessions.map(s => {
+        if (s.id === sessionId) {
+          return {
+            ...s,
+            messages: s.messages.map(m => {
+              if (m.id === loadingMessageId) {
+                return {
+                  ...m,
+                  content: successfulImages.length > 0
+                    ? `已生成 ${successfulImages.length} 张图像`
+                    : "图像生成失败",
+                  images: completedImages,
+                  isLoading: false,
+                };
+              }
+              return m;
+            }),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return s;
+      });
 
-    saveSessions(finalSessions);
+      // Save to IndexedDB (no quota issues, keep all data including base64)
+      imageSessionStorage.saveSessions(finalSessions).catch(error => {
+        console.error("Failed to save sessions to IndexedDB:", error);
+      });
+
+      return finalSessions;
+    });
 
     if (successfulImages.length > 0) {
       toast.success(`成功生成 ${successfulImages.length} 张图像`);
@@ -569,6 +663,22 @@ const ImageGenerationPage: React.FC = () => {
       m.images?.some(img => img.id === failedImage.id)
     );
 
+    // Find the user message that triggered this generation (it's right before the assistant message)
+    // The user message contains the reference images used for this generation
+    let userMessageWithRefs: ChatMessage | undefined;
+    if (failedMessageIndex > 0) {
+      // Look for the user message right before the failed assistant message
+      for (let i = failedMessageIndex - 1; i >= 0; i--) {
+        if (allMessages[i].role === "user") {
+          userMessageWithRefs = allMessages[i];
+          break;
+        }
+      }
+    }
+
+    // Get reference image base64s from the original user message
+    const refImageBase64sForRetry = userMessageWithRefs?.referenceImageBase64s;
+
     // Include all messages BEFORE the failed image's message
     // For assistant messages, buildConversationHistory will only include successful images
     // Example: if failed image is in msg3, include msg0, msg1, msg2
@@ -580,9 +690,20 @@ const ImageGenerationPage: React.FC = () => {
       ? allMessages.slice(0, failedMessageIndex)  // All messages before the failed image's message
       : [];
 
+    // Build conversation history with reference images if they exist
+    // Convert base64 strings to ReferenceImage format for buildConversationHistory
+    const refImagesForHistory: ReferenceImage[] | undefined = refImageBase64sForRetry?.map((base64, i) => ({
+      id: `retry-ref-${i}`,
+      file: new File([], ""),  // Dummy file, not needed for retry
+      previewUrl: "",
+      base64,
+    }));
+
     const conversationHistory = await buildConversationHistory(
       messagesForHistory,
-      enhancedPrompt
+      enhancedPrompt,
+      undefined,
+      refImagesForHistory
     );
 
     try {
@@ -630,23 +751,31 @@ const ImageGenerationPage: React.FC = () => {
         createdAt: new Date().toISOString(),
       };
 
-      // Update the session with the new image
-      const updatedSessions = sessions.map(s => {
-        if (s.id === currentSessionId) {
-          return {
-            ...s,
-            messages: s.messages.map(m => ({
-              ...m,
-              images: m.images?.map(img =>
-                img.id === failedImage.id ? newImage : img
-              ),
-            })),
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return s;
+      // Update the session with the new image using functional update
+      setSessions(currentSessions => {
+        const updatedSessions = currentSessions.map(s => {
+          if (s.id === currentSessionId) {
+            return {
+              ...s,
+              messages: s.messages.map(m => ({
+                ...m,
+                images: m.images?.map(img =>
+                  img.id === failedImage.id ? newImage : img
+                ),
+              })),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return s;
+        });
+
+        // Save to IndexedDB (no quota issues, keep all data including base64)
+        imageSessionStorage.saveSessions(updatedSessions).catch(error => {
+          console.error("Failed to save sessions to IndexedDB:", error);
+        });
+
+        return updatedSessions;
       });
-      saveSessions(updatedSessions);
       toast.success("图像重新生成成功");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "图像生成失败";
@@ -802,6 +931,29 @@ const ImageGenerationPage: React.FC = () => {
                   {message.role === "user" ? (
                     // User Message
                     <div className="max-w-[80%] bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3">
+                      {message.referenceImageBase64s && message.referenceImageBase64s.length > 0 && (
+                        <div className="mb-3 pb-3 border-b border-white/20">
+                          <div className="flex items-center gap-1 mb-2">
+                            <Paperclip className="w-3 h-3" />
+                            <span className="text-xs opacity-80">{message.referenceImageBase64s.length} 张参考图像</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {message.referenceImageBase64s.map((base64, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setPreviewReferenceImage(base64)}
+                                className="w-12 h-12 rounded-lg overflow-hidden border-2 border-white/30 hover:border-white/60 transition-colors cursor-pointer"
+                              >
+                                <img
+                                  src={base64}
+                                  alt={`参考图像 ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
                   ) : (
@@ -921,6 +1073,51 @@ const ImageGenerationPage: React.FC = () => {
         {/* Input Area */}
         <div className="border-t border-gray-200 bg-white p-4">
           <div className="max-w-4xl mx-auto">
+            {/* Reference Images Preview */}
+            {referenceImages.length > 0 && (
+              <div className="mb-3 p-3 bg-violet-50 rounded-xl border border-violet-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-violet-700 flex items-center gap-1">
+                    <Paperclip className="w-3 h-3" />
+                    参考图像 ({referenceImages.length})
+                  </span>
+                  <button
+                    onClick={handleClearReferenceImages}
+                    className="text-xs text-violet-600 hover:text-violet-800 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    清除全部
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {referenceImages.map((img) => (
+                    <div
+                      key={img.id}
+                      className="relative group w-16 h-16 rounded-lg overflow-hidden border border-violet-200 bg-white"
+                    >
+                      <img
+                        src={img.previewUrl}
+                        alt="参考图像"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        onClick={() => handleRemoveReferenceImage(img.id)}
+                        className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-16 h-16 rounded-lg border-2 border-dashed border-violet-300 hover:border-violet-400 flex items-center justify-center text-violet-400 hover:text-violet-500 transition-colors"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Settings Panel - Always visible by default */}
             {showSettings && (
               <div className="mb-4 p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 shadow-sm">
@@ -1051,6 +1248,16 @@ const ImageGenerationPage: React.FC = () => {
               </div>
             )}
 
+            {/* Hidden file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept="image/*"
+              multiple
+              className="hidden"
+            />
+
             {/* Input Row */}
             <div className="flex items-end gap-3">
               <button
@@ -1065,16 +1272,33 @@ const ImageGenerationPage: React.FC = () => {
                 <Settings2 className="w-5 h-5" />
               </button>
 
+              {/* Upload button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "p-2.5 rounded-lg transition-colors",
+                  referenceImages.length > 0
+                    ? "bg-violet-100 text-violet-600"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}
+                title="上传参考图像"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+
               <div className="flex-1 relative">
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="描述你想要生成的图像... (Enter 发送, Shift+Enter 换行)"
+                  placeholder={referenceImages.length > 0 ? "描述你想基于参考图像生成的内容..." : "描述你想要生成的图像... (Enter 发送, Shift+Enter 换行)"}
                   className="min-h-[48px] max-h-[200px] pr-12 resize-none rounded-xl border-gray-200 focus:border-violet-400 focus:ring-violet-400"
                   rows={1}
                 />
                 <div className="absolute right-2 bottom-2 flex items-center gap-1 text-xs text-gray-400">
+                  {referenceImages.length > 0 && (
+                    <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded">{referenceImages.length} 图</span>
+                  )}
                   <span className="px-1.5 py-0.5 bg-gray-100 rounded">{config.aspectRatio}</span>
                 </div>
               </div>
@@ -1137,6 +1361,27 @@ const ImageGenerationPage: React.FC = () => {
                     <Copy className="w-4 h-4 mr-2" />
                     复制提示词
                   </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reference Image Preview Dialog */}
+      <Dialog open={!!previewReferenceImage} onOpenChange={() => setPreviewReferenceImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95">
+          {previewReferenceImage && (
+            <div className="relative">
+              <img
+                src={previewReferenceImage}
+                alt="参考图像预览"
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-white/80" />
+                  <span className="text-white text-sm">参考图像</span>
                 </div>
               </div>
             </div>
