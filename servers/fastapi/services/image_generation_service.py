@@ -317,6 +317,132 @@ class ImageGenerationService:
 
         raise Exception(f"Could not extract image from response: {message_content[:200]}...")
 
+    async def generate_image_chat(
+        self,
+        messages: list,
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K"
+    ) -> str:
+        """
+        Generate image using multi-turn chat conversation.
+        Messages should be a list of {"role": "user"|"assistant", "content": "..."} dicts.
+        Images in assistant messages should be in markdown format: ![image](data:image/png;base64,...)
+        """
+        import base64
+        import re
+        import json
+
+        openai_url = get_openai_image_url_env() or get_openai_url_env()
+        openai_api_key = get_openai_image_api_key_env() or get_openai_api_key_env()
+        model = get_openai_image_model_env() or "gemini-3-pro-image-preview"
+
+        print(f"OpenAI Chat Image Generation (Multi-turn) - Model: {model}, Aspect Ratio: {aspect_ratio}, Image Size: {image_size}")
+        print(f"Number of messages in conversation: {len(messages)}")
+
+        # Build the API URL
+        if openai_url:
+            base_url = openai_url.rstrip('/')
+            if not base_url.endswith('/v1'):
+                base_url = base_url.rstrip('/') + '/v1'
+            api_url = f"{base_url}/chat/completions"
+        else:
+            api_url = "https://api.openai.com/v1/chat/completions"
+
+        # Build request payload with conversation history
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": aspect_ratio,
+                    "imageSize": image_size
+                }
+            }
+        }
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if openai_api_key:
+            headers["Authorization"] = f"Bearer {openai_api_key}"
+
+        print(f"OpenAI Chat API URL: {api_url}")
+
+        # Make async HTTP request
+        message_content = ""
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"API request failed with status {response.status}: {error_text}")
+
+                full_response = await response.text()
+
+                for line in full_response.split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            if "content" in delta:
+                                message_content += delta["content"]
+                    except json.JSONDecodeError:
+                        continue
+
+        if not message_content:
+            raise Exception("No content received from streaming response")
+
+        print(f"Response content (first 500 chars): {message_content[:500]}")
+
+        # Extract image from response
+        image_path = os.path.join(self.output_directory, f"{uuid.uuid4()}.png")
+
+        # Try to find base64 image in markdown format
+        markdown_pattern = r'!\[.*?\]\(data:image/[^;]+;base64,([A-Za-z0-9+/=]+)\)'
+        markdown_match = re.search(markdown_pattern, message_content)
+        if markdown_match:
+            image_data = base64.b64decode(markdown_match.group(1))
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            return image_path
+
+        # Try to find base64 image with data URL prefix
+        data_url_pattern = r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)'
+        data_url_match = re.search(data_url_pattern, message_content)
+        if data_url_match:
+            image_data = base64.b64decode(data_url_match.group(1))
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            return image_path
+
+        # Try to find a URL to an image
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+\.(?:png|jpg|jpeg|gif|webp)'
+        url_match = re.search(url_pattern, message_content, re.IGNORECASE)
+        if url_match:
+            image_url = url_match.group(0)
+            return await download_file(image_url, self.output_directory)
+
+        # If the entire content looks like base64
+        if message_content and re.match(r'^[A-Za-z0-9+/=]+$', message_content.strip()):
+            try:
+                image_data = base64.b64decode(message_content.strip())
+                with open(image_path, "wb") as f:
+                    f.write(image_data)
+                return image_path
+            except Exception:
+                pass
+
+        raise Exception(f"Could not extract image from response: {message_content[:200]}...")
+
     async def get_image_from_pexels(self, prompt: str) -> str:
         async with aiohttp.ClientSession(trust_env=True) as session:
             response = await session.get(

@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from pydantic import BaseModel
 
 from models.image_prompt import ImagePrompt
 from models.sql.image_asset import ImageAsset
@@ -13,6 +14,18 @@ import uuid
 from utils.file_utils import get_file_name_with_random_uuid
 
 IMAGES_ROUTER = APIRouter(prefix="/images", tags=["Images"])
+
+
+# Models for multi-turn chat
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str  # Text content or image in markdown format
+
+
+class ChatGenerateRequest(BaseModel):
+    messages: List[ChatMessage]
+    aspect_ratio: str = "1:1"
+    image_size: str = "1K"
 
 
 @IMAGES_ROUTER.get("/generate")
@@ -32,6 +45,39 @@ async def generate_image(
             aspect_ratio=aspect_ratio,
             image_size=image_size,
             raise_on_error=True
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not isinstance(image, ImageAsset):
+        return image
+
+    sql_session.add(image)
+    await sql_session.commit()
+
+    return image.path
+
+
+@IMAGES_ROUTER.post("/chat/generate")
+async def generate_image_chat(
+    request: ChatGenerateRequest,
+    sql_session: AsyncSession = Depends(get_async_session)
+):
+    """
+    Generate image using multi-turn chat conversation.
+    Messages should include conversation history with images in markdown format.
+    """
+    images_directory = get_images_directory()
+    image_generation_service = ImageGenerationService(images_directory)
+
+    # Convert messages to the format expected by the service
+    messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+    try:
+        image = await image_generation_service.generate_image_chat(
+            messages=messages,
+            aspect_ratio=request.aspect_ratio,
+            image_size=request.image_size,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -210,6 +210,66 @@ const ImageGenerationPage: React.FC = () => {
     setConfig(prev => ({ ...prev, [key]: value }));
   }, []);
 
+  // Helper function to convert image URL to base64
+  const imageUrlToBase64 = async (url: string): Promise<string> => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Failed to convert image to base64:", error);
+      return "";
+    }
+  };
+
+  // Build conversation history for API request
+  const buildConversationHistory = async (
+    sessionMessages: ChatMessage[],
+    newPrompt: string
+  ): Promise<Array<{ role: string; content: string }>> => {
+    const messages: Array<{ role: string; content: string }> = [];
+
+    // Process existing messages (exclude loading messages)
+    for (const msg of sessionMessages) {
+      if (msg.isLoading) continue;
+
+      if (msg.role === "user") {
+        messages.push({
+          role: "user",
+          content: msg.content,
+        });
+      } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
+        // For assistant messages with images, convert first successful image to base64
+        const successfulImage = msg.images.find(img => img.url && !img.error);
+        if (successfulImage) {
+          const base64 = await imageUrlToBase64(successfulImage.url);
+          if (base64) {
+            messages.push({
+              role: "assistant",
+              content: `![image](${base64})`,
+            });
+          }
+        }
+      }
+    }
+
+    // Add the new user message
+    messages.push({
+      role: "user",
+      content: newPrompt,
+    });
+
+    return messages;
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error("请输入图像描述");
@@ -285,23 +345,28 @@ const ImageGenerationPage: React.FC = () => {
     saveSessions(updatedSessions);
     setPrompt("");
 
-    // Generate images in parallel
+    // Get the current session's existing messages for conversation history
+    const existingSession = updatedSessions.find(s => s.id === sessionId);
+    const existingMessages = existingSession?.messages.filter(m => m.id !== loadingMessageId) || [];
+
+    // Build conversation history (this converts images to base64)
+    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt);
+    console.log(`Multi-turn chat: ${conversationHistory.length} messages in history`);
+
+    // Generate images in parallel using multi-turn API
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
       try {
-        const params = new URLSearchParams({
-          prompt: enhancedPrompt,
-          aspect_ratio: currentConfig.aspectRatio,
-          image_size: currentConfig.resolution,
+        const response = await fetch("/api/v1/ppt/images/chat/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: conversationHistory,
+            aspect_ratio: currentConfig.aspectRatio,
+            image_size: currentConfig.resolution,
+          }),
         });
-        const response = await fetch(
-          `/api/v1/ppt/images/generate?${params.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
 
         if (!response.ok) {
           let errorMessage = "图像生成失败";
