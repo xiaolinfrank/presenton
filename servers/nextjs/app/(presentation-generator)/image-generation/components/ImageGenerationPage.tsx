@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -19,7 +19,12 @@ import {
   Wand2,
   Copy,
   Trash2,
-  ZoomIn
+  ZoomIn,
+  History,
+  Clock,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -35,7 +40,19 @@ interface GeneratedImage {
   prompt: string;
   model: string;
   aspectRatio: string;
-  createdAt: Date;
+  resolution: string;
+  createdAt: string;
+  isLoading?: boolean;
+}
+
+interface HistorySession {
+  id: string;
+  prompt: string;
+  model: string;
+  aspectRatio: string;
+  resolution: string;
+  images: GeneratedImage[];
+  createdAt: string;
 }
 
 interface ImageGenerationConfig {
@@ -46,6 +63,8 @@ interface ImageGenerationConfig {
 }
 
 // Constants
+const STORAGE_KEY = "presenton_image_generation_history";
+
 const MODELS = [
   { id: "gemini-3-pro-image-preview", name: "Nano Banana 3", description: "高质量多模态图像生成" },
   { id: "dall-e-3", name: "DALL-E 3", description: "OpenAI 图像生成模型" },
@@ -70,6 +89,21 @@ const RESOLUTIONS = [
 
 const COUNTS = [1, 2, 3, 4];
 
+// Skeleton Loading Component
+const ImageSkeleton: React.FC<{ aspectRatio: string }> = ({ aspectRatio }) => {
+  return (
+    <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 aspect-square shadow-md">
+      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/40 to-transparent skeleton-shimmer" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+        <div className="w-16 h-16 rounded-full bg-gray-300/50 flex items-center justify-center mb-3 animate-pulse">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+        <p className="text-sm font-medium animate-pulse">生成中...</p>
+      </div>
+    </div>
+  );
+};
+
 const ImageGenerationPage: React.FC = () => {
   const [prompt, setPrompt] = useState("");
   const [config, setConfig] = useState<ImageGenerationConfig>({
@@ -81,6 +115,32 @@ const ImageGenerationPage: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [history, setHistory] = useState<HistorySession[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setHistory(parsed);
+      }
+    } catch (error) {
+      console.error("Failed to load history:", error);
+    }
+  }, []);
+
+  // Save history to localStorage
+  const saveHistory = useCallback((newHistory: HistorySession[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+      setHistory(newHistory);
+    } catch (error) {
+      console.error("Failed to save history:", error);
+    }
+  }, []);
 
   const handleConfigChange = useCallback((key: keyof ImageGenerationConfig, value: string | number) => {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -93,14 +153,33 @@ const ImageGenerationPage: React.FC = () => {
     }
 
     setIsGenerating(true);
+    const sessionId = `session-${Date.now()}`;
+    const currentPrompt = prompt;
+    const currentConfig = { ...config };
 
-    try {
-      // Generate images based on count
-      const newImages: GeneratedImage[] = [];
+    // Create placeholder loading images
+    const placeholders: GeneratedImage[] = Array.from({ length: config.count }, (_, i) => ({
+      id: `${sessionId}-${i}`,
+      url: "",
+      prompt: currentPrompt,
+      model: currentConfig.model,
+      aspectRatio: currentConfig.aspectRatio,
+      resolution: currentConfig.resolution,
+      createdAt: new Date().toISOString(),
+      isLoading: true,
+    }));
 
-      for (let i = 0; i < config.count; i++) {
+    // Add placeholders to the current view
+    setGeneratedImages(prev => [...placeholders, ...prev]);
+
+    const completedImages: GeneratedImage[] = [];
+    let hasError = false;
+
+    // Generate images one by one and replace placeholders
+    for (let i = 0; i < currentConfig.count; i++) {
+      try {
         const response = await fetch(
-          `/api/v1/ppt/images/generate?prompt=${encodeURIComponent(prompt)}`,
+          `/api/v1/ppt/images/generate?prompt=${encodeURIComponent(currentPrompt)}`,
           {
             method: "GET",
             headers: {
@@ -114,25 +193,56 @@ const ImageGenerationPage: React.FC = () => {
         }
 
         const imagePath = await response.text();
-
-        newImages.push({
-          id: `${Date.now()}-${i}`,
+        const newImage: GeneratedImage = {
+          id: `${sessionId}-${i}`,
           url: imagePath.replace(/"/g, ''),
-          prompt: prompt,
-          model: config.model,
-          aspectRatio: config.aspectRatio,
-          createdAt: new Date(),
-        });
-      }
+          prompt: currentPrompt,
+          model: currentConfig.model,
+          aspectRatio: currentConfig.aspectRatio,
+          resolution: currentConfig.resolution,
+          createdAt: new Date().toISOString(),
+          isLoading: false,
+        };
 
-      setGeneratedImages(prev => [...newImages, ...prev]);
-      toast.success(`成功生成 ${newImages.length} 张图像`);
-    } catch (error) {
-      console.error("Image generation error:", error);
-      toast.error("图像生成失败，请重试");
-    } finally {
-      setIsGenerating(false);
+        completedImages.push(newImage);
+
+        // Replace the placeholder with the actual image
+        setGeneratedImages(prev => prev.map(img =>
+          img.id === `${sessionId}-${i}` ? newImage : img
+        ));
+      } catch (error) {
+        console.error(`Image ${i + 1} generation error:`, error);
+        hasError = true;
+        // Remove failed placeholder
+        setGeneratedImages(prev => prev.filter(img => img.id !== `${sessionId}-${i}`));
+      }
     }
+
+    // Save to history if we have at least one successful image
+    if (completedImages.length > 0) {
+      const newSession: HistorySession = {
+        id: sessionId,
+        prompt: currentPrompt,
+        model: currentConfig.model,
+        aspectRatio: currentConfig.aspectRatio,
+        resolution: currentConfig.resolution,
+        images: completedImages,
+        createdAt: new Date().toISOString(),
+      };
+
+      const newHistory = [newSession, ...history].slice(0, 50); // Keep last 50 sessions
+      saveHistory(newHistory);
+
+      toast.success(`成功生成 ${completedImages.length} 张图像`);
+    }
+
+    if (hasError && completedImages.length === 0) {
+      toast.error("图像生成失败，请重试");
+    } else if (hasError) {
+      toast.warning(`部分图像生成失败，成功 ${completedImages.length}/${currentConfig.count} 张`);
+    }
+
+    setIsGenerating(false);
   };
 
   const handleDownload = async (image: GeneratedImage) => {
@@ -163,12 +273,70 @@ const ImageGenerationPage: React.FC = () => {
     toast.success("图像已删除");
   };
 
+  const handleDeleteSession = (sessionId: string) => {
+    const newHistory = history.filter(s => s.id !== sessionId);
+    saveHistory(newHistory);
+    toast.success("历史记录已删除");
+  };
+
+  const handleClearHistory = () => {
+    saveHistory([]);
+    toast.success("历史记录已清空");
+  };
+
+  const handleLoadFromHistory = (session: HistorySession) => {
+    setPrompt(session.prompt);
+    setConfig({
+      model: session.model,
+      count: session.images.length,
+      aspectRatio: session.aspectRatio,
+      resolution: session.resolution,
+    });
+    toast.success("已加载历史配置");
+  };
+
+  const toggleSession = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
   const getModelName = (modelId: string) => {
     return MODELS.find(m => m.id === modelId)?.name || modelId;
   };
 
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Filter out loading images for display count
+  const loadedImages = generatedImages.filter(img => !img.isLoading);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      {/* Add shimmer animation styles */}
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .skeleton-shimmer {
+          animation: shimmer 1.5s infinite;
+        }
+      `}</style>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="text-center mb-10">
@@ -352,23 +520,24 @@ const ImageGenerationPage: React.FC = () => {
           </div>
 
           {/* Right Panel - Generated Images */}
-          <div className="lg:col-span-2">
-            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur min-h-[600px]">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Current Generation Results */}
+            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur min-h-[400px]">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                     <ImageIcon className="w-5 h-5 text-violet-500" />
                     生成结果
                   </h2>
-                  {generatedImages.length > 0 && (
+                  {loadedImages.length > 0 && (
                     <span className="text-sm text-gray-500">
-                      {generatedImages.length} 张图像
+                      {loadedImages.length} 张图像
                     </span>
                   )}
                 </div>
 
                 {generatedImages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[500px] text-gray-400">
+                  <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
                     <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
                       <ImageIcon className="w-12 h-12" />
                     </div>
@@ -378,68 +547,211 @@ const ImageGenerationPage: React.FC = () => {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {generatedImages.map((image) => (
-                      <div
-                        key={image.id}
-                        className="group relative rounded-xl overflow-hidden bg-gray-100 aspect-square shadow-md hover:shadow-xl transition-shadow duration-300"
-                      >
-                        <img
-                          src={image.url}
-                          alt={image.prompt}
-                          className="w-full h-full object-cover"
-                        />
+                      image.isLoading ? (
+                        <ImageSkeleton key={image.id} aspectRatio={image.aspectRatio} />
+                      ) : (
+                        <div
+                          key={image.id}
+                          className="group relative rounded-xl overflow-hidden bg-gray-100 aspect-square shadow-md hover:shadow-xl transition-shadow duration-300"
+                        >
+                          <img
+                            src={image.url}
+                            alt={image.prompt}
+                            className="w-full h-full object-cover"
+                          />
 
-                        {/* Overlay on hover */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          {/* Top Actions */}
-                          <div className="absolute top-3 right-3 flex gap-2">
-                            <button
-                              onClick={() => setSelectedImage(image)}
-                              className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
-                              title="放大查看"
-                            >
-                              <ZoomIn className="w-4 h-4 text-gray-700" />
-                            </button>
-                            <button
-                              onClick={() => handleDownload(image)}
-                              className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
-                              title="下载图像"
-                            >
-                              <Download className="w-4 h-4 text-gray-700" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(image.id)}
-                              className="p-2 bg-white/90 hover:bg-red-50 rounded-lg shadow-lg transition-colors"
-                              title="删除图像"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </button>
-                          </div>
-
-                          {/* Bottom Info */}
-                          <div className="absolute bottom-0 left-0 right-0 p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
-                                {getModelName(image.model)}
-                              </span>
-                              <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
-                                {image.aspectRatio}
-                              </span>
+                          {/* Overlay on hover */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            {/* Top Actions */}
+                            <div className="absolute top-3 right-3 flex gap-2">
+                              <button
+                                onClick={() => setSelectedImage(image)}
+                                className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
+                                title="放大查看"
+                              >
+                                <ZoomIn className="w-4 h-4 text-gray-700" />
+                              </button>
+                              <button
+                                onClick={() => handleDownload(image)}
+                                className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
+                                title="下载图像"
+                              >
+                                <Download className="w-4 h-4 text-gray-700" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(image.id)}
+                                className="p-2 bg-white/90 hover:bg-red-50 rounded-lg shadow-lg transition-colors"
+                                title="删除图像"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </button>
                             </div>
-                            <p className="text-sm text-white/90 line-clamp-2 mb-2">
-                              {image.prompt}
-                            </p>
-                            <button
-                              onClick={() => handleCopyPrompt(image.prompt)}
-                              className="flex items-center gap-1 text-xs text-white/80 hover:text-white transition-colors"
-                            >
-                              <Copy className="w-3 h-3" />
-                              复制提示词
-                            </button>
+
+                            {/* Bottom Info */}
+                            <div className="absolute bottom-0 left-0 right-0 p-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                                  {getModelName(image.model)}
+                                </span>
+                                <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                                  {image.aspectRatio}
+                                </span>
+                              </div>
+                              <p className="text-sm text-white/90 line-clamp-2 mb-2">
+                                {image.prompt}
+                              </p>
+                              <button
+                                onClick={() => handleCopyPrompt(image.prompt)}
+                                className="flex items-center gap-1 text-xs text-white/80 hover:text-white transition-colors"
+                              >
+                                <Copy className="w-3 h-3" />
+                                复制提示词
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )
                     ))}
                   </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* History Section */}
+            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="flex items-center gap-2 text-lg font-semibold text-gray-800 hover:text-violet-600 transition-colors"
+                  >
+                    <History className="w-5 h-5 text-violet-500" />
+                    生成历史
+                    {showHistory ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {history.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearHistory}
+                      className="text-gray-500 hover:text-red-500"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      清空历史
+                    </Button>
+                  )}
+                </div>
+
+                {/* Storage Warning */}
+                <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg mb-4 text-amber-800">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs">
+                    历史记录保存在浏览器本地存储中。清除浏览器缓存或更换浏览器后，历史记录将会丢失。
+                  </p>
+                </div>
+
+                {showHistory && (
+                  <>
+                    {history.length === 0 ? (
+                      <div className="text-center py-8 text-gray-400">
+                        <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p className="text-sm">暂无历史记录</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                        {history.map((session) => (
+                          <div
+                            key={session.id}
+                            className="border border-gray-200 rounded-xl overflow-hidden hover:border-violet-300 transition-colors"
+                          >
+                            {/* Session Header */}
+                            <div
+                              className="p-4 bg-gray-50 cursor-pointer"
+                              onClick={() => toggleSession(session.id)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">
+                                      {getModelName(session.model)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {session.images.length} 张图像
+                                    </span>
+                                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {formatDate(session.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-700 line-clamp-2">
+                                    {session.prompt}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 ml-4">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLoadFromHistory(session);
+                                    }}
+                                    className="text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                  >
+                                    <Copy className="w-3 h-3 mr-1" />
+                                    使用
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteSession(session.id);
+                                    }}
+                                    className="text-gray-400 hover:text-red-500"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                  {expandedSessions.has(session.id) ? (
+                                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Session Images */}
+                            {expandedSessions.has(session.id) && (
+                              <div className="p-4 border-t border-gray-200 bg-white">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {session.images.map((image) => (
+                                    <div
+                                      key={image.id}
+                                      className="group relative rounded-lg overflow-hidden bg-gray-100 aspect-square cursor-pointer"
+                                      onClick={() => setSelectedImage(image)}
+                                    >
+                                      <img
+                                        src={image.url}
+                                        alt={image.prompt}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      />
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                        <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
