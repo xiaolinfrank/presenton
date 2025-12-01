@@ -57,7 +57,12 @@ class ImageGenerationService:
     def is_stock_provider_selected(self):
         return is_pixels_selected() or is_pixabay_selected()
 
-    async def generate_image(self, prompt: ImagePrompt) -> str | ImageAsset:
+    async def generate_image(
+        self,
+        prompt: ImagePrompt,
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K"
+    ) -> str | ImageAsset:
         """
         Generates an image based on the provided prompt.
         - If no image generation function is available, returns a placeholder image.
@@ -81,6 +86,11 @@ class ImageGenerationService:
         try:
             if self.is_stock_provider_selected():
                 image_path = await self.image_gen_func(image_prompt)
+            elif is_openai_chat_selected():
+                # Pass aspect_ratio and image_size for OpenAI Chat-based image generation
+                image_path = await self.image_gen_func(
+                    image_prompt, self.output_directory, aspect_ratio, image_size
+                )
             else:
                 image_path = await self.image_gen_func(
                     image_prompt, self.output_directory
@@ -156,7 +166,13 @@ class ImageGenerationService:
 
         return image_path
 
-    async def generate_image_openai_chat(self, prompt: str, output_directory: str) -> str:
+    async def generate_image_openai_chat(
+        self,
+        prompt: str,
+        output_directory: str,
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K"
+    ) -> str:
         """
         Generate image using OpenAI-compatible Chat Completions API.
         This is for models like gemini-3-pro-image-preview that generate images
@@ -178,7 +194,7 @@ class ImageGenerationService:
         client = AsyncOpenAI(**client_kwargs)
         model = get_openai_image_model_env() or "gemini-3-pro-image-preview"
 
-        # Use chat completions API for image generation
+        # Use chat completions API for image generation with extra_body for custom parameters
         response = await client.chat.completions.create(
             model=model,
             messages=[
@@ -188,6 +204,14 @@ class ImageGenerationService:
                 }
             ],
             stream=False,
+            extra_body={
+                "generationConfig": {
+                    "imageConfig": {
+                        "aspectRatio": aspect_ratio,
+                        "imageSize": image_size
+                    }
+                }
+            }
         )
 
         # Extract image from response

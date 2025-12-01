@@ -17,13 +17,20 @@ IMAGES_ROUTER = APIRouter(prefix="/images", tags=["Images"])
 
 @IMAGES_ROUTER.get("/generate")
 async def generate_image(
-    prompt: str, sql_session: AsyncSession = Depends(get_async_session)
+    prompt: str,
+    aspect_ratio: str = "1:1",
+    image_size: str = "1K",
+    sql_session: AsyncSession = Depends(get_async_session)
 ):
     images_directory = get_images_directory()
     image_prompt = ImagePrompt(prompt=prompt)
     image_generation_service = ImageGenerationService(images_directory)
 
-    image = await image_generation_service.generate_image(image_prompt)
+    image = await image_generation_service.generate_image(
+        image_prompt,
+        aspect_ratio=aspect_ratio,
+        image_size=image_size
+    )
     if not isinstance(image, ImageAsset):
         return image
 

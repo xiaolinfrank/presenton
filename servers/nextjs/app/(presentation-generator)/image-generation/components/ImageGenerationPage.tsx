@@ -79,12 +79,15 @@ const ASPECT_RATIOS = [
   { id: "3:4", name: "3:4", description: "标准纵向" },
   { id: "3:2", name: "3:2", description: "照片横向" },
   { id: "2:3", name: "2:3", description: "照片纵向" },
+  { id: "4:5", name: "4:5", description: "社交媒体纵向" },
+  { id: "5:4", name: "5:4", description: "社交媒体横向" },
+  { id: "21:9", name: "21:9", description: "超宽屏" },
 ];
 
 const RESOLUTIONS = [
-  { id: "1024x1024", name: "1024 x 1024", description: "标准" },
-  { id: "1536x1536", name: "1536 x 1536", description: "高清" },
-  { id: "2048x2048", name: "2048 x 2048", description: "超高清" },
+  { id: "1K", name: "1K", description: "标准 (~1024px)" },
+  { id: "2K", name: "2K", description: "高清 (~2048px)" },
+  { id: "4K", name: "4K", description: "超高清 (~4096px)" },
 ];
 
 const COUNTS = [1, 2, 3, 4];
@@ -110,7 +113,7 @@ const ImageGenerationPage: React.FC = () => {
     model: "gemini-3-pro-image-preview",
     count: 1,
     aspectRatio: "1:1",
-    resolution: "1024x1024",
+    resolution: "1K",
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
@@ -178,8 +181,13 @@ const ImageGenerationPage: React.FC = () => {
     // Generate images one by one and replace placeholders
     for (let i = 0; i < currentConfig.count; i++) {
       try {
+        const params = new URLSearchParams({
+          prompt: currentPrompt,
+          aspect_ratio: currentConfig.aspectRatio,
+          image_size: currentConfig.resolution,
+        });
         const response = await fetch(
-          `/api/v1/ppt/images/generate?prompt=${encodeURIComponent(currentPrompt)}`,
+          `/api/v1/ppt/images/generate?${params.toString()}`,
           {
             method: "GET",
             headers: {
