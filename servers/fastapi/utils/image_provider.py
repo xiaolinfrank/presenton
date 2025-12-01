@@ -30,6 +30,10 @@ def is_dalle3_selected() -> bool:
     return ImageProvider.DALLE3 == get_selected_image_provider()
 
 
+def is_openai_chat_selected() -> bool:
+    return ImageProvider.OPENAI_CHAT == get_selected_image_provider()
+
+
 def get_selected_image_provider() -> ImageProvider | None:
     """
     Get the selected image provider from environment variables.
@@ -51,6 +55,8 @@ def get_image_provider_api_key() -> str:
     elif selected_image_provider == ImageProvider.GEMINI_FLASH:
         return get_google_api_key_env()
     elif selected_image_provider == ImageProvider.DALLE3:
+        return get_openai_api_key_env()
+    elif selected_image_provider == ImageProvider.OPENAI_CHAT:
         return get_openai_api_key_env()
     else:
         raise ValueError(f"Invalid image provider: {selected_image_provider}")

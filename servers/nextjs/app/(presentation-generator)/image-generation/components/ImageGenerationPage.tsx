@@ -1,0 +1,1150 @@
+"use client";
+
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sparkles,
+  Download,
+  Loader2,
+  Image as ImageIcon,
+  Wand2,
+  Copy,
+  Trash2,
+  ZoomIn,
+  Plus,
+  MessageSquare,
+  Send,
+  Settings2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  X,
+  RefreshCw,
+  Zap,
+  Palette,
+  Bot,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
+
+// Types
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  images?: GeneratedImage[];
+  timestamp: string;
+  isLoading?: boolean;
+}
+
+interface GeneratedImage {
+  id: string;
+  url: string;
+  prompt: string;
+  model: string;
+  aspectRatio: string;
+  resolution: string;
+  createdAt: string;
+  isLoading?: boolean;
+  error?: string;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  config: ImageGenerationConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ImageGenerationConfig {
+  model: string;
+  count: number;
+  aspectRatio: string;
+  resolution: string;
+}
+
+// Constants
+const STORAGE_KEY = "presenton_image_chat_sessions";
+
+const MODELS = [
+  {
+    id: "gemini-3-pro-image-preview",
+    name: "Nano Banana Pro",
+    description: "高质量多模态图像生成",
+    icon: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+    color: "from-yellow-400 to-orange-500"
+  },
+  {
+    id: "dall-e-3",
+    name: "DALL-E 3",
+    description: "OpenAI 图像生成模型",
+    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
+    color: "from-green-400 to-teal-500"
+  },
+  {
+    id: "gpt-image-1",
+    name: "GPT Image 1",
+    description: "GPT 系列图像模型",
+    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
+    color: "from-blue-400 to-indigo-500"
+  },
+];
+
+const ASPECT_RATIOS = [
+  { id: "1:1", name: "1:1", description: "正方形" },
+  { id: "16:9", name: "16:9", description: "宽屏横向" },
+  { id: "9:16", name: "9:16", description: "竖屏纵向" },
+  { id: "4:3", name: "4:3", description: "标准横向" },
+  { id: "3:4", name: "3:4", description: "标准纵向" },
+  { id: "3:2", name: "3:2", description: "照片横向" },
+  { id: "2:3", name: "2:3", description: "照片纵向" },
+  { id: "4:5", name: "4:5", description: "社交媒体纵向" },
+  { id: "5:4", name: "5:4", description: "社交媒体横向" },
+  { id: "21:9", name: "21:9", description: "超宽屏" },
+];
+
+const RESOLUTIONS = [
+  { id: "1K", name: "1K", description: "标准" },
+  { id: "2K", name: "2K", description: "高清" },
+  { id: "4K", name: "4K", description: "超高清" },
+];
+
+const COUNTS = [1, 2, 3, 4];
+
+const DEFAULT_CONFIG: ImageGenerationConfig = {
+  model: "gemini-3-pro-image-preview",
+  count: 1,
+  aspectRatio: "1:1",
+  resolution: "1K",
+};
+
+// Helper function to generate title from first prompt
+const generateTitle = (prompt: string): string => {
+  const maxLength = 20;
+  if (prompt.length <= maxLength) return prompt;
+  return prompt.substring(0, maxLength) + "...";
+};
+
+const ImageGenerationPage: React.FC = () => {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [config, setConfig] = useState<ImageGenerationConfig>(DEFAULT_CONFIG);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [showSettings, setShowSettings] = useState(true);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Get current session
+  const currentSession = sessions.find(s => s.id === currentSessionId);
+
+  // Load sessions from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setSessions(parsed);
+        // Auto-select the most recent session if exists
+        if (parsed.length > 0) {
+          setCurrentSessionId(parsed[0].id);
+          setConfig(parsed[0].config);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load sessions:", error);
+    }
+  }, []);
+
+  // Save sessions to localStorage
+  const saveSessions = useCallback((newSessions: ChatSession[]) => {
+    // Always update React state first, regardless of localStorage success
+    setSessions(newSessions);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
+    } catch (error) {
+      console.error("Failed to save sessions to localStorage:", error);
+    }
+  }, []);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [currentSession?.messages]);
+
+  // Create new session
+  const handleNewSession = useCallback(() => {
+    const newSession: ChatSession = {
+      id: `session-${Date.now()}`,
+      title: "新对话",
+      messages: [],
+      config: { ...DEFAULT_CONFIG },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const newSessions = [newSession, ...sessions];
+    saveSessions(newSessions);
+    setCurrentSessionId(newSession.id);
+    setConfig(DEFAULT_CONFIG);
+    setPrompt("");
+  }, [sessions, saveSessions]);
+
+  // Select session
+  const handleSelectSession = useCallback((sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      setCurrentSessionId(sessionId);
+      setConfig(session.config);
+      setPrompt("");
+    }
+  }, [sessions]);
+
+  // Delete session
+  const handleDeleteSession = useCallback((sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSessions = sessions.filter(s => s.id !== sessionId);
+    saveSessions(newSessions);
+    if (currentSessionId === sessionId) {
+      setCurrentSessionId(newSessions.length > 0 ? newSessions[0].id : null);
+      if (newSessions.length > 0) {
+        setConfig(newSessions[0].config);
+      }
+    }
+    toast.success("会话已删除");
+  }, [sessions, currentSessionId, saveSessions]);
+
+  const handleConfigChange = useCallback((key: keyof ImageGenerationConfig, value: string | number) => {
+    setConfig(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  // Helper function to convert image URL to base64
+  const imageUrlToBase64 = async (url: string): Promise<string> => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Failed to convert image to base64:", error);
+      return "";
+    }
+  };
+
+  // Build conversation history for API request (OpenAI multimodal format)
+  const buildConversationHistory = async (
+    sessionMessages: ChatMessage[],
+    newPrompt: string,
+    currentUserMessageId?: string  // ID of current user message to exclude
+  ): Promise<Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}>> => {
+    const messages: Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}> = [];
+
+    // Process existing messages (exclude loading messages and current user message)
+    for (const msg of sessionMessages) {
+      if (msg.isLoading) continue;
+      if (currentUserMessageId && msg.id === currentUserMessageId) continue;  // Skip current user message
+
+      if (msg.role === "user") {
+        messages.push({
+          role: "user",
+          content: msg.content,
+        });
+      } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
+        // For assistant messages with images, include ALL successful images
+        const successfulImages = msg.images.filter(img => img.url && !img.error);
+
+        if (successfulImages.length > 0) {
+          // Convert all successful images to base64
+          const imageContents: Array<{type: string; image_url: {url: string}}> = [];
+
+          for (const img of successfulImages) {
+            try {
+              const base64 = await imageUrlToBase64(img.url);
+              if (base64) {
+                imageContents.push({
+                  type: "image_url",
+                  image_url: { url: base64 }
+                });
+              }
+            } catch (error) {
+              // Skip this image if conversion fails
+            }
+          }
+
+          if (imageContents.length > 0) {
+            messages.push({
+              role: "assistant",
+              content: imageContents,
+            });
+          }
+        }
+      }
+    }
+
+    // Add the new user message
+    messages.push({
+      role: "user",
+      content: newPrompt,
+    });
+
+    return messages;
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      toast.error("请输入图像描述");
+      return;
+    }
+
+    // Create session if none exists
+    let sessionId = currentSessionId;
+    let updatedSessions = [...sessions];
+
+    if (!sessionId) {
+      const newSession: ChatSession = {
+        id: `session-${Date.now()}`,
+        title: generateTitle(prompt),
+        messages: [],
+        config: { ...config },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updatedSessions = [newSession, ...sessions];
+      sessionId = newSession.id;
+      setCurrentSessionId(sessionId);
+    }
+
+    setIsGenerating(true);
+    const currentPrompt = prompt;
+    const currentConfig = { ...config };
+
+    // Build the enhanced prompt with aspect ratio
+    const enhancedPrompt = `${currentPrompt}（图像比例 ${currentConfig.aspectRatio}）`;
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}-user`,
+      role: "user",
+      content: currentPrompt,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Add assistant loading message
+    const loadingMessageId = `msg-${Date.now()}-assistant`;
+    const loadingMessage: ChatMessage = {
+      id: loadingMessageId,
+      role: "assistant",
+      content: "",
+      images: Array.from({ length: currentConfig.count }, (_, i) => ({
+        id: `img-${Date.now()}-${i}`,
+        url: "",
+        prompt: currentPrompt,
+        model: currentConfig.model,
+        aspectRatio: currentConfig.aspectRatio,
+        resolution: currentConfig.resolution,
+        createdAt: new Date().toISOString(),
+        isLoading: true,
+      })),
+      timestamp: new Date().toISOString(),
+      isLoading: true,
+    };
+
+    // Update session with messages
+    updatedSessions = updatedSessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          title: s.messages.length === 0 ? generateTitle(currentPrompt) : s.title,
+          messages: [...s.messages, userMessage, loadingMessage],
+          config: currentConfig,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    saveSessions(updatedSessions);
+    setPrompt("");
+
+    // Get the current session's existing messages for conversation history
+    const existingSession = updatedSessions.find(s => s.id === sessionId);
+    const existingMessages = existingSession?.messages.filter(m => m.id !== loadingMessageId) || [];
+
+    // Build conversation history (this converts images to base64)
+    // Pass userMessage.id to exclude the current user message (we add it with enhanced prompt)
+    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt, userMessage.id);
+
+    // Generate images in parallel using multi-turn API
+    const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
+      try {
+        const response = await fetch("/api/v1/ppt/images/chat/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: conversationHistory,
+            aspect_ratio: currentConfig.aspectRatio,
+            image_size: currentConfig.resolution,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMessage = "图像生成失败";
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorMessage;
+          } catch {
+            const errorText = await response.text();
+            if (errorText) errorMessage = errorText;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const imagePath = await response.text();
+        const cleanUrl = imagePath.replace(/"/g, '').trim();
+
+        // Validate that we got a valid image path
+        if (!cleanUrl || cleanUrl === 'null' || cleanUrl === 'undefined') {
+          throw new Error("服务器返回空响应，图像生成失败");
+        }
+
+        // Validate that the URL looks like a valid file path or URL
+        if (!cleanUrl.startsWith('/') && !cleanUrl.startsWith('http')) {
+          throw new Error(`服务器返回无效响应: ${cleanUrl.substring(0, 100)}`);
+        }
+
+        return {
+          id: `img-${Date.now()}-${index}`,
+          url: cleanUrl,
+          prompt: currentPrompt,
+          model: currentConfig.model,
+          aspectRatio: currentConfig.aspectRatio,
+          resolution: currentConfig.resolution,
+          createdAt: new Date().toISOString(),
+          isLoading: false,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+        console.error(`Image ${index + 1} generation error:`, errorMessage);
+        return {
+          id: `img-${Date.now()}-${index}`,
+          url: "",
+          prompt: currentPrompt,
+          model: currentConfig.model,
+          aspectRatio: currentConfig.aspectRatio,
+          resolution: currentConfig.resolution,
+          createdAt: new Date().toISOString(),
+          isLoading: false,
+          error: errorMessage,
+        };
+      }
+    };
+
+    // Launch all requests in parallel
+    const results = await Promise.all(
+      Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
+    );
+
+    let completedImages = results.filter((img): img is GeneratedImage => img !== null);
+    const successfulImages = completedImages.filter(img => !img.error);
+
+    // Ensure we always have at least one image (even if it's an error) to show in the UI
+    if (completedImages.length === 0) {
+      completedImages = [{
+        id: `img-${Date.now()}-error`,
+        url: "",
+        prompt: currentPrompt,
+        model: currentConfig.model,
+        aspectRatio: currentConfig.aspectRatio,
+        resolution: currentConfig.resolution,
+        createdAt: new Date().toISOString(),
+        isLoading: false,
+        error: "图像生成失败，请重试",
+      }];
+    }
+
+    // Update the assistant message with results
+    const finalSessions = updatedSessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          messages: s.messages.map(m => {
+            if (m.id === loadingMessageId) {
+              return {
+                ...m,
+                content: successfulImages.length > 0
+                  ? `已生成 ${successfulImages.length} 张图像`
+                  : "图像生成失败",
+                images: completedImages,
+                isLoading: false,
+              };
+            }
+            return m;
+          }),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+
+    saveSessions(finalSessions);
+
+    if (successfulImages.length > 0) {
+      toast.success(`成功生成 ${successfulImages.length} 张图像`);
+    } else {
+      toast.error("图像生成失败，请重试");
+    }
+
+    setIsGenerating(false);
+  };
+
+  const handleDownload = async (image: GeneratedImage) => {
+    try {
+      const response = await fetch(image.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `image-${image.id}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success("图像下载成功");
+    } catch (error) {
+      toast.error("下载失败");
+    }
+  };
+
+  const handleCopyPrompt = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("提示词已复制");
+  };
+
+  const getModelName = (modelId: string) => {
+    return MODELS.find(m => m.id === modelId)?.name || modelId;
+  };
+
+  const getModelInfo = (modelId: string) => {
+    return MODELS.find(m => m.id === modelId);
+  };
+
+  // Retry failed image generation
+  const handleRetry = async (failedImage: GeneratedImage) => {
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    toast.info("正在重新生成图像...");
+
+    const enhancedPrompt = `${failedImage.prompt}（图像比例 ${failedImage.aspectRatio}）`;
+
+    // Get current session messages in real-time (to capture any recent retry successes)
+    // This ensures if another image was retried and succeeded, we can see it
+    const allMessages = currentSession?.messages.filter(m => !m.isLoading) || [];
+
+    // Find the message containing the failed image
+    const failedMessageIndex = allMessages.findIndex(m =>
+      m.images?.some(img => img.id === failedImage.id)
+    );
+
+    // Include all messages BEFORE the failed image's message
+    // For assistant messages, buildConversationHistory will only include successful images
+    // Example: if failed image is in msg3, include msg0, msg1, msg2
+    // This means:
+    // - All user messages before the failed generation are included
+    // - All successful images from assistant messages before the failed one are included
+    // - The failed image's message is NOT included (we're regenerating it)
+    const messagesForHistory = failedMessageIndex > 0
+      ? allMessages.slice(0, failedMessageIndex)  // All messages before the failed image's message
+      : [];
+
+    const conversationHistory = await buildConversationHistory(
+      messagesForHistory,
+      enhancedPrompt
+    );
+
+    try {
+      const response = await fetch("/api/v1/ppt/images/chat/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: conversationHistory,
+          aspect_ratio: failedImage.aspectRatio,
+          image_size: failedImage.resolution,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "图像生成失败";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const imagePath = await response.text();
+      const cleanUrl = imagePath.replace(/"/g, '').trim();
+
+      // Validate that we got a valid image path
+      if (!cleanUrl || cleanUrl === 'null' || cleanUrl === 'undefined') {
+        throw new Error("服务器返回空响应，图像生成失败");
+      }
+
+      // Validate that the URL looks like a valid file path or URL
+      if (!cleanUrl.startsWith('/') && !cleanUrl.startsWith('http')) {
+        throw new Error(`服务器返回无效响应: ${cleanUrl.substring(0, 100)}`);
+      }
+
+      const newImage: GeneratedImage = {
+        ...failedImage,
+        url: cleanUrl,
+        error: undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Update the session with the new image
+      const updatedSessions = sessions.map(s => {
+        if (s.id === currentSessionId) {
+          return {
+            ...s,
+            messages: s.messages.map(m => ({
+              ...m,
+              images: m.images?.map(img =>
+                img.id === failedImage.id ? newImage : img
+              ),
+            })),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return s;
+      });
+      saveSessions(updatedSessions);
+      toast.success("图像重新生成成功");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+      toast.error(`重试失败: ${errorMessage}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return "昨天";
+    } else if (diffDays < 7) {
+      return `${diffDays}天前`;
+    } else {
+      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isGenerating && prompt.trim()) {
+        handleGenerate();
+      }
+    }
+  };
+
+  return (
+    <div className="h-[calc(100vh-64px)] flex bg-gray-50">
+      {/* Add shimmer animation styles */}
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .skeleton-shimmer {
+          animation: shimmer 1.5s infinite;
+        }
+      `}</style>
+
+      {/* Left Sidebar - Session History */}
+      <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
+        {/* New Chat Button */}
+        <div className="p-4 border-b border-gray-100">
+          <Button
+            onClick={handleNewSession}
+            className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            新建对话
+          </Button>
+        </div>
+
+        {/* Session List */}
+        <div className="flex-1 overflow-y-auto">
+          {sessions.length === 0 ? (
+            <div className="p-4 text-center text-gray-400">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">暂无对话</p>
+            </div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  onClick={() => handleSelectSession(session.id)}
+                  className={cn(
+                    "group p-3 rounded-lg cursor-pointer transition-colors",
+                    currentSessionId === session.id
+                      ? "bg-violet-50 border border-violet-200"
+                      : "hover:bg-gray-50"
+                  )}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "text-sm font-medium truncate",
+                        currentSessionId === session.id ? "text-violet-700" : "text-gray-700"
+                      )}>
+                        {session.title}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {formatDate(session.updatedAt)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => handleDeleteSession(session.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Storage Warning */}
+        <div className="p-3 border-t border-gray-100">
+          <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg text-amber-700">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <p className="text-xs">
+              对话保存在本地，清除缓存后将丢失
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Chat Messages */}
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-6"
+        >
+          {!currentSession || currentSession.messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-4">
+                <ImageIcon className="w-10 h-10 text-violet-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-700 mb-2">AI 图像生成</h2>
+              <p className="text-sm text-gray-500 mb-6">描述你想要的图像，AI 将为你创作</p>
+              <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                {["一只可爱的橘猫", "未来科技城市", "水彩风格的花园", "星空下的山脉"].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setPrompt(suggestion)}
+                    className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-full hover:border-violet-300 hover:bg-violet-50 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-6">
+              {currentSession.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex",
+                    message.role === "user" ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {message.role === "user" ? (
+                    // User Message
+                    <div className="max-w-[80%] bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3">
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                  ) : (
+                    // Assistant Message
+                    <div className="max-w-[90%] space-y-3">
+                      {message.isLoading ? (
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">正在生成图像...</span>
+                        </div>
+                      ) : !message.images || message.images.length === 0 ? (
+                        // No images - show error message with retry
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <AlertCircle className="w-5 h-5 text-red-500" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-red-700">图像生成失败</p>
+                            <p className="text-xs text-red-500 mt-0.5">{message.content || "请重试"}</p>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {message.images && message.images.length > 0 && (
+                        <div className={cn(
+                          "grid gap-3",
+                          message.images.length === 1 ? "grid-cols-1" :
+                          message.images.length === 2 ? "grid-cols-2" :
+                          message.images.length === 3 ? "grid-cols-3" : "grid-cols-2"
+                        )}>
+                          {message.images.map((image) => (
+                            image.isLoading ? (
+                              // Loading skeleton
+                              <div
+                                key={image.id}
+                                className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 aspect-square shadow-md"
+                              >
+                                <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/40 to-transparent skeleton-shimmer" />
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                                  <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                                  <p className="text-sm">生成中...</p>
+                                </div>
+                              </div>
+                            ) : image.error ? (
+                              // Error state with retry button
+                              <div
+                                key={image.id}
+                                className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-50 to-red-100 aspect-square shadow-md border border-red-200"
+                              >
+                                <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                                    <AlertCircle className="w-6 h-6 text-red-500" />
+                                  </div>
+                                  <p className="text-sm font-medium text-red-700 mb-1">生成失败</p>
+                                  <p className="text-xs text-red-500 line-clamp-2 mb-3 max-w-[90%]">{image.error}</p>
+                                  <button
+                                    onClick={() => handleRetry(image)}
+                                    disabled={isGenerating}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-lg transition-colors"
+                                  >
+                                    {isGenerating ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-3 h-3" />
+                                    )}
+                                    重试
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              // Success image
+                              <div
+                                key={image.id}
+                                className="group relative rounded-xl overflow-hidden bg-gray-100 aspect-square shadow-md hover:shadow-xl transition-shadow cursor-pointer"
+                                onClick={() => setSelectedImage(image)}
+                              >
+                                <img
+                                  src={image.url}
+                                  alt={image.prompt}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                  <div className="opacity-0 group-hover:opacity-100 flex gap-2 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedImage(image);
+                                      }}
+                                      className="p-2 bg-white/90 hover:bg-white rounded-lg"
+                                    >
+                                      <ZoomIn className="w-4 h-4 text-gray-700" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownload(image);
+                                      }}
+                                      className="p-2 bg-white/90 hover:bg-white rounded-lg"
+                                    >
+                                      <Download className="w-4 h-4 text-gray-700" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="border-t border-gray-200 bg-white p-4">
+          <div className="max-w-4xl mx-auto">
+            {/* Settings Panel - Always visible by default */}
+            {showSettings && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 shadow-sm">
+                {/* Model Selection - Card Style */}
+                <div className="mb-4">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 block flex items-center gap-1.5">
+                    <Bot className="w-3.5 h-3.5" />
+                    模型选择
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {MODELS.map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => handleConfigChange("model", model.id)}
+                        className={cn(
+                          "relative p-3 rounded-lg border-2 transition-all text-left",
+                          config.model === model.id
+                            ? "border-violet-500 bg-violet-50 shadow-md"
+                            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center",
+                            model.color
+                          )}>
+                            <img
+                              src={model.icon}
+                              alt={model.name}
+                              className="w-5 h-5"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "text-sm font-medium truncate",
+                              config.model === model.id ? "text-violet-700" : "text-gray-800"
+                            )}>
+                              {model.name}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">{model.description}</p>
+                          </div>
+                        </div>
+                        {config.model === model.id && (
+                          <div className="absolute top-1 right-1">
+                            <div className="w-2 h-2 rounded-full bg-violet-500" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Other Settings - Horizontal Row */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Count */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      数量
+                    </label>
+                    <Select
+                      value={config.count.toString()}
+                      onValueChange={(value) => handleConfigChange("count", parseInt(value))}
+                    >
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTS.map((count) => (
+                          <SelectItem key={count} value={count.toString()}>
+                            {count} 张
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Aspect Ratio */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <Palette className="w-3 h-3" />
+                      宽高比
+                    </label>
+                    <Select
+                      value={config.aspectRatio}
+                      onValueChange={(value) => handleConfigChange("aspectRatio", value)}
+                    >
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASPECT_RATIOS.map((ratio) => (
+                          <SelectItem key={ratio.id} value={ratio.id}>
+                            <span className="font-medium">{ratio.name}</span>
+                            <span className="text-gray-400 ml-1">· {ratio.description}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Resolution */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />
+                      分辨率
+                    </label>
+                    <Select
+                      value={config.resolution}
+                      onValueChange={(value) => handleConfigChange("resolution", value)}
+                    >
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESOLUTIONS.map((res) => (
+                          <SelectItem key={res.id} value={res.id}>
+                            {res.name} - {res.description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Input Row */}
+            <div className="flex items-end gap-3">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={cn(
+                  "p-2.5 rounded-lg transition-colors",
+                  showSettings
+                    ? "bg-violet-100 text-violet-600"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}
+              >
+                <Settings2 className="w-5 h-5" />
+              </button>
+
+              <div className="flex-1 relative">
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="描述你想要生成的图像... (Enter 发送, Shift+Enter 换行)"
+                  className="min-h-[48px] max-h-[200px] pr-12 resize-none rounded-xl border-gray-200 focus:border-violet-400 focus:ring-violet-400"
+                  rows={1}
+                />
+                <div className="absolute right-2 bottom-2 flex items-center gap-1 text-xs text-gray-400">
+                  <span className="px-1.5 py-0.5 bg-gray-100 rounded">{config.aspectRatio}</span>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+                className="h-12 px-4 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+          {selectedImage && (
+            <div className="relative">
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.prompt}
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+                <p className="text-white text-sm mb-3">{selectedImage.prompt}</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {getModelName(selectedImage.model)}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {selectedImage.aspectRatio}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {selectedImage.resolution}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <Button
+                    onClick={() => handleDownload(selectedImage)}
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/20 hover:bg-white/30 text-white border-0"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    下载
+                  </Button>
+                  <Button
+                    onClick={() => handleCopyPrompt(selectedImage.prompt)}
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/20 hover:bg-white/30 text-white border-0"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    复制提示词
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ImageGenerationPage;
