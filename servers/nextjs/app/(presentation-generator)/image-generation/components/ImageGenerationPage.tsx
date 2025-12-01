@@ -178,6 +178,7 @@ const ImageGenerationPage: React.FC = () => {
 
     // Generate images in parallel
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
+      console.log(`[${new Date().toISOString()}] Starting image generation ${index + 1}`);
       try {
         const params = new URLSearchParams({
           prompt: currentPrompt,
@@ -225,10 +226,11 @@ const ImageGenerationPage: React.FC = () => {
           img.id === `${sessionId}-${index}` ? newImage : img
         ));
 
+        console.log(`[${new Date().toISOString()}] Completed image generation ${index + 1}`);
         return newImage;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "图像生成失败";
-        console.error(`Image ${index + 1} generation error:`, errorMessage);
+        console.error(`[${new Date().toISOString()}] Image ${index + 1} generation error:`, errorMessage);
 
         // Update placeholder to show error state instead of removing it
         const errorImage: GeneratedImage = {
@@ -252,9 +254,10 @@ const ImageGenerationPage: React.FC = () => {
     };
 
     // Launch all image generation requests in parallel
-    const results = await Promise.all(
-      Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
-    );
+    console.log(`[${new Date().toISOString()}] Launching ${currentConfig.count} parallel requests`);
+    const promises = Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i));
+    console.log(`[${new Date().toISOString()}] All promises created, waiting for completion`);
+    const results = await Promise.all(promises);
 
     const completedImages = results.filter((img): img is GeneratedImage => img !== null);
     const hasError = completedImages.length < currentConfig.count;
