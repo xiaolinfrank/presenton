@@ -187,50 +187,96 @@ class ImageGenerationService:
         Generate image using OpenAI-compatible Chat Completions API.
         This is for models like gemini-3-pro-image-preview that generate images
         through the chat completions endpoint instead of the images/generations endpoint.
+        Uses direct HTTP request instead of OpenAI SDK to support custom generationConfig.
         """
         import base64
         import re
+        import json
 
         openai_url = get_openai_image_url_env() or get_openai_url_env()
         openai_api_key = get_openai_image_api_key_env() or get_openai_api_key_env()
-
-        # Build client with optional parameters
-        client_kwargs = {}
-        if openai_url:
-            client_kwargs['base_url'] = openai_url
-        if openai_api_key:
-            client_kwargs['api_key'] = openai_api_key
-
-        client = AsyncOpenAI(**client_kwargs)
         model = get_openai_image_model_env() or "gemini-3-pro-image-preview"
 
         print(f"OpenAI Chat Image Generation - Model: {model}, Aspect Ratio: {aspect_ratio}, Image Size: {image_size}")
 
-        # Use chat completions API for image generation with extra_body for custom parameters
-        # The prompt must clearly instruct the model to generate an image, not describe how to generate one
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
+        # Build the API URL
+        if openai_url:
+            # Remove trailing slash and ensure /chat/completions endpoint
+            base_url = openai_url.rstrip('/')
+            if not base_url.endswith('/v1'):
+                base_url = base_url.rstrip('/') + '/v1'
+            api_url = f"{base_url}/chat/completions"
+        else:
+            api_url = "https://api.openai.com/v1/chat/completions"
+
+        # Build request payload with generationConfig at root level
+        payload = {
+            "model": model,
+            "messages": [
                 {
                     "role": "user",
                     "content": f"Please generate an image directly (do not describe or explain, just create the image): {prompt}"
                 }
             ],
-            stream=False,
-            extra_body={
-                "generationConfig": {
-                    "responseModalities": ["TEXT", "IMAGE"],
-                    "imageConfig": {
-                        "aspectRatio": aspect_ratio,
-                        "imageSize": image_size
-                    }
+            "stream": False,
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": aspect_ratio,
+                    "imageSize": image_size
                 }
             }
-        )
+        }
 
-        # Extract image from response
-        # The response may contain base64 image data in various formats
-        message_content = response.choices[0].message.content
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if openai_api_key:
+            headers["Authorization"] = f"Bearer {openai_api_key}"
+
+        print(f"OpenAI Chat API URL: {api_url}")
+        print(f"OpenAI Chat Payload: {json.dumps(payload, indent=2)}")
+
+        # Make async HTTP request using aiohttp
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"API request failed with status {response.status}: {error_text}")
+
+                response_data = await response.json()
+
+        # Extract message content from response
+        if "choices" not in response_data or len(response_data["choices"]) == 0:
+            raise Exception(f"Invalid API response: no choices found. Response: {response_data}")
+
+        message_content = response_data["choices"][0].get("message", {}).get("content", "")
+
+        # Handle case where content might be a list (some APIs return array of content parts)
+        if isinstance(message_content, list):
+            # Try to find image data in the content parts
+            for part in message_content:
+                if isinstance(part, dict):
+                    if part.get("type") == "image" and "data" in part:
+                        # Direct image data
+                        image_path = os.path.join(output_directory, f"{uuid.uuid4()}.png")
+                        image_data = base64.b64decode(part["data"])
+                        with open(image_path, "wb") as f:
+                            f.write(image_data)
+                        return image_path
+                    elif part.get("type") == "text":
+                        # Text content, might contain image URL or base64
+                        message_content = part.get("text", "")
+                        break
+            else:
+                # Convert list to string for further processing
+                message_content = str(message_content)
+
+        if not message_content:
+            raise Exception(f"Empty content in API response. Full response: {json.dumps(response_data)[:500]}")
+
+        print(f"Response content (first 500 chars): {str(message_content)[:500]}")
 
         # Check if the response contains base64 image data
         # Common patterns: data:image/png;base64,... or just base64 string
