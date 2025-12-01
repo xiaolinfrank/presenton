@@ -374,6 +374,11 @@ const ImageGenerationPage: React.FC = () => {
     // Build conversation history (this converts images to base64)
     const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt);
     console.log(`Multi-turn chat: ${conversationHistory.length} messages in history`);
+    console.log("Conversation history:", JSON.stringify(conversationHistory.map(m => ({
+      role: m.role,
+      contentLength: m.content.length,
+      contentPreview: m.content.substring(0, 200)
+    })), null, 2));
 
     // Generate images in parallel using multi-turn API
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {

@@ -339,6 +339,11 @@ class ImageGenerationService:
         print(f"OpenAI Chat Image Generation (Multi-turn) - Model: {model}, Aspect Ratio: {aspect_ratio}, Image Size: {image_size}")
         print(f"Number of messages in conversation: {len(messages)}")
 
+        # Log each message (truncate content for readability)
+        for i, msg in enumerate(messages):
+            content_preview = msg.get("content", "")[:200] + "..." if len(msg.get("content", "")) > 200 else msg.get("content", "")
+            print(f"Message {i}: role={msg.get('role')}, content_length={len(msg.get('content', ''))}, preview={content_preview}")
+
         # Build the API URL
         if openai_url:
             base_url = openai_url.rstrip('/')
