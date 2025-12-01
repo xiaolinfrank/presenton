@@ -805,14 +805,6 @@ const ImageGenerationPage: React.FC = () => {
                           message.images.length === 2 ? "grid-cols-2" :
                           message.images.length === 3 ? "grid-cols-3" : "grid-cols-2"
                         )}>
-                          {/* Debug: log images being rendered */}
-                          {console.log("Rendering images:", message.images.map(img => ({
-                            id: img.id,
-                            hasUrl: !!img.url,
-                            hasError: !!img.error,
-                            error: img.error,
-                            isLoading: img.isLoading
-                          })))}
                           {message.images.map((image) => (
                             image.isLoading ? (
                               // Loading skeleton
