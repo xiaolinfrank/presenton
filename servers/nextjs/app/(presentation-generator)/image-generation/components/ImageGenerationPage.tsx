@@ -406,8 +406,13 @@ const ImageGenerationPage: React.FC = () => {
         const cleanUrl = imagePath.replace(/"/g, '').trim();
 
         // Validate that we got a valid image path
-        if (!cleanUrl) {
+        if (!cleanUrl || cleanUrl === 'null' || cleanUrl === 'undefined') {
           throw new Error("服务器返回空响应，图像生成失败");
+        }
+
+        // Validate that the URL looks like a valid file path or URL
+        if (!cleanUrl.startsWith('/') && !cleanUrl.startsWith('http')) {
+          throw new Error(`服务器返回无效响应: ${cleanUrl.substring(0, 100)}`);
         }
 
         return {
@@ -555,8 +560,13 @@ const ImageGenerationPage: React.FC = () => {
       const cleanUrl = imagePath.replace(/"/g, '').trim();
 
       // Validate that we got a valid image path
-      if (!cleanUrl) {
+      if (!cleanUrl || cleanUrl === 'null' || cleanUrl === 'undefined') {
         throw new Error("服务器返回空响应，图像生成失败");
+      }
+
+      // Validate that the URL looks like a valid file path or URL
+      if (!cleanUrl.startsWith('/') && !cleanUrl.startsWith('http')) {
+        throw new Error(`服务器返回无效响应: ${cleanUrl.substring(0, 100)}`);
       }
 
       const newImage: GeneratedImage = {
