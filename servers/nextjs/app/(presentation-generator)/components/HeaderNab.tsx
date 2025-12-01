@@ -1,5 +1,5 @@
 "use client";
-import { LayoutDashboard, Settings, Upload } from "lucide-react";
+import { LayoutDashboard, Settings, Upload, ImageIcon } from "lucide-react";
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -25,6 +25,18 @@ const HeaderNav = () => {
         <LayoutDashboard className="w-5 h-5" />
         <span className="text-sm font-medium font-inter">
           控制台
+        </span>
+      </Link>
+      <Link
+        href="/image-generation"
+        prefetch={false}
+        className="flex items-center gap-2 px-3 py-2 text-white hover:bg-primary/80 rounded-md transition-colors outline-none"
+        role="menuitem"
+        onClick={() => trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/image-generation" })}
+      >
+        <ImageIcon className="w-5 h-5" />
+        <span className="text-sm font-medium font-inter">
+          图像生成
         </span>
       </Link>
       {canChangeKeys && (
