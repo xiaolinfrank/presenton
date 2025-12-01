@@ -218,7 +218,7 @@ class ImageGenerationService:
                     "content": f"Please generate an image directly (do not describe or explain, just create the image): {prompt}"
                 }
             ],
-            "stream": False,
+            "stream": True,  # Use streaming to get chunked response
             "generationConfig": {
                 "responseModalities": ["TEXT", "IMAGE"],
                 "imageConfig": {
@@ -238,45 +238,39 @@ class ImageGenerationService:
         print(f"OpenAI Chat API URL: {api_url}")
         print(f"OpenAI Chat Payload: {json.dumps(payload, indent=2)}")
 
-        # Make async HTTP request using aiohttp
+        # Make async HTTP request using aiohttp with streaming
+        message_content = ""
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(api_url, json=payload, headers=headers) as response:
                 if response.status != 200:
                     error_text = await response.text()
                     raise Exception(f"API request failed with status {response.status}: {error_text}")
 
-                response_data = await response.json()
-
-        # Extract message content from response
-        if "choices" not in response_data or len(response_data["choices"]) == 0:
-            raise Exception(f"Invalid API response: no choices found. Response: {response_data}")
-
-        message_content = response_data["choices"][0].get("message", {}).get("content", "")
-
-        # Handle case where content might be a list (some APIs return array of content parts)
-        if isinstance(message_content, list):
-            # Try to find image data in the content parts
-            for part in message_content:
-                if isinstance(part, dict):
-                    if part.get("type") == "image" and "data" in part:
-                        # Direct image data
-                        image_path = os.path.join(output_directory, f"{uuid.uuid4()}.png")
-                        image_data = base64.b64decode(part["data"])
-                        with open(image_path, "wb") as f:
-                            f.write(image_data)
-                        return image_path
-                    elif part.get("type") == "text":
-                        # Text content, might contain image URL or base64
-                        message_content = part.get("text", "")
+                # Process streaming response (SSE format)
+                async for line in response.content:
+                    line = line.decode('utf-8').strip()
+                    if not line:
+                        continue
+                    # Handle SSE format: data: {...}
+                    if line.startswith("data: "):
+                        line = line[6:]  # Remove "data: " prefix
+                    if line == "[DONE]":
                         break
-            else:
-                # Convert list to string for further processing
-                message_content = str(message_content)
+                    try:
+                        chunk = json.loads(line)
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            # Extract content from delta (image data is in content field)
+                            if "content" in delta:
+                                message_content += delta["content"]
+                    except json.JSONDecodeError:
+                        # Skip non-JSON lines
+                        continue
 
         if not message_content:
-            raise Exception(f"Empty content in API response. Full response: {json.dumps(response_data)[:500]}")
+            raise Exception("No content received from streaming response")
 
-        print(f"Response content (first 500 chars): {str(message_content)[:500]}")
+        print(f"Response content (first 500 chars): {message_content[:500]}")
 
         # Check if the response contains base64 image data
         # Common patterns: data:image/png;base64,... or just base64 string
