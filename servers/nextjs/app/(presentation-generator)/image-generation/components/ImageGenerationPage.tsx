@@ -272,25 +272,32 @@ const ImageGenerationPage: React.FC = () => {
           content: msg.content,
         });
       } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
-        // For assistant messages with images, use OpenAI multimodal format
-        const successfulImage = msg.images.find(img => img.url && !img.error);
-        if (successfulImage) {
-          try {
-            const base64 = await imageUrlToBase64(successfulImage.url);
-            if (base64) {
-              // Use OpenAI-compatible multimodal format
-              messages.push({
-                role: "assistant",
-                content: [
-                  {
-                    type: "image_url",
-                    image_url: { url: base64 }
-                  }
-                ],
-              });
+        // For assistant messages with images, include ALL successful images
+        const successfulImages = msg.images.filter(img => img.url && !img.error);
+
+        if (successfulImages.length > 0) {
+          // Convert all successful images to base64
+          const imageContents: Array<{type: string; image_url: {url: string}}> = [];
+
+          for (const img of successfulImages) {
+            try {
+              const base64 = await imageUrlToBase64(img.url);
+              if (base64) {
+                imageContents.push({
+                  type: "image_url",
+                  image_url: { url: base64 }
+                });
+              }
+            } catch (error) {
+              // Skip this image if conversion fails
             }
-          } catch (error) {
-            // Skip this image if conversion fails
+          }
+
+          if (imageContents.length > 0) {
+            messages.push({
+              role: "assistant",
+              content: imageContents,
+            });
           }
         }
       }
@@ -553,21 +560,24 @@ const ImageGenerationPage: React.FC = () => {
 
     const enhancedPrompt = `${failedImage.prompt}（图像比例 ${failedImage.aspectRatio}）`;
 
-    // Get the current session's existing messages for conversation history
-    // We need to exclude:
-    // 1. The assistant message that contains the failed image
-    // 2. The user message that triggered that failed generation
-    const existingMessages = currentSession?.messages.filter(m => !m.isLoading) || [];
+    // Get current session messages in real-time (to capture any recent retry successes)
+    // This ensures if another image was retried and succeeded, we can see it
+    const allMessages = currentSession?.messages.filter(m => !m.isLoading) || [];
 
     // Find the message containing the failed image
-    const failedMessageIndex = existingMessages.findIndex(m =>
+    const failedMessageIndex = allMessages.findIndex(m =>
       m.images?.some(img => img.id === failedImage.id)
     );
 
-    // Exclude the failed assistant message and the user message before it
-    // Also don't include any messages with only failed images
+    // Include all messages BEFORE the failed image's message
+    // For assistant messages, buildConversationHistory will only include successful images
+    // Example: if failed image is in msg3, include msg0, msg1, msg2
+    // This means:
+    // - All user messages before the failed generation are included
+    // - All successful images from assistant messages before the failed one are included
+    // - The failed image's message is NOT included (we're regenerating it)
     const messagesForHistory = failedMessageIndex > 0
-      ? existingMessages.slice(0, failedMessageIndex - 1)  // Exclude both user msg and failed assistant msg
+      ? allMessages.slice(0, failedMessageIndex)  // All messages before the failed image's message
       : [];
 
     const conversationHistory = await buildConversationHistory(
