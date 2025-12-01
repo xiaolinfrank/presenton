@@ -27,6 +27,7 @@ from utils.image_provider import (
     is_pixabay_selected,
     is_gemini_flash_selected,
     is_dalle3_selected,
+    is_openai_chat_selected,
 )
 import uuid
 
@@ -49,6 +50,8 @@ class ImageGenerationService:
             return self.generate_image_google
         elif is_dalle3_selected():
             return self.generate_image_openai
+        elif is_openai_chat_selected():
+            return self.generate_image_openai_chat
         return None
 
     def is_stock_provider_selected(self):
@@ -152,6 +155,85 @@ class ImageGenerationService:
                     f.write(part.inline_data.data)
 
         return image_path
+
+    async def generate_image_openai_chat(self, prompt: str, output_directory: str) -> str:
+        """
+        Generate image using OpenAI-compatible Chat Completions API.
+        This is for models like gemini-3-pro-image-preview that generate images
+        through the chat completions endpoint instead of the images/generations endpoint.
+        """
+        import base64
+        import re
+
+        openai_url = get_openai_image_url_env() or get_openai_url_env()
+        openai_api_key = get_openai_image_api_key_env() or get_openai_api_key_env()
+
+        # Build client with optional parameters
+        client_kwargs = {}
+        if openai_url:
+            client_kwargs['base_url'] = openai_url
+        if openai_api_key:
+            client_kwargs['api_key'] = openai_api_key
+
+        client = AsyncOpenAI(**client_kwargs)
+        model = get_openai_image_model_env() or "gemini-3-pro-image-preview"
+
+        # Use chat completions API for image generation
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Generate an image: {prompt}"
+                }
+            ],
+            stream=False,
+        )
+
+        # Extract image from response
+        # The response may contain base64 image data in various formats
+        message_content = response.choices[0].message.content
+
+        # Check if the response contains base64 image data
+        # Common patterns: data:image/png;base64,... or just base64 string
+        image_path = os.path.join(output_directory, f"{uuid.uuid4()}.png")
+
+        # Try to find base64 image in markdown format: ![...](data:image/...;base64,...)
+        markdown_pattern = r'!\[.*?\]\(data:image/[^;]+;base64,([A-Za-z0-9+/=]+)\)'
+        markdown_match = re.search(markdown_pattern, message_content)
+        if markdown_match:
+            image_data = base64.b64decode(markdown_match.group(1))
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            return image_path
+
+        # Try to find base64 image with data URL prefix
+        data_url_pattern = r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)'
+        data_url_match = re.search(data_url_pattern, message_content)
+        if data_url_match:
+            image_data = base64.b64decode(data_url_match.group(1))
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            return image_path
+
+        # Try to find a URL to an image
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+\.(?:png|jpg|jpeg|gif|webp)'
+        url_match = re.search(url_pattern, message_content, re.IGNORECASE)
+        if url_match:
+            image_url = url_match.group(0)
+            return await download_file(image_url, output_directory)
+
+        # If the entire content looks like base64 (no other text)
+        if message_content and re.match(r'^[A-Za-z0-9+/=]+$', message_content.strip()):
+            try:
+                image_data = base64.b64decode(message_content.strip())
+                with open(image_path, "wb") as f:
+                    f.write(image_data)
+                return image_path
+            except Exception:
+                pass
+
+        raise Exception(f"Could not extract image from response: {message_content[:200]}...")
 
     async def get_image_from_pexels(self, prompt: str) -> str:
         async with aiohttp.ClientSession(trust_env=True) as session:
