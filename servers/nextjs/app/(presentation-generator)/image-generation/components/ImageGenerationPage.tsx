@@ -403,9 +403,16 @@ const ImageGenerationPage: React.FC = () => {
         }
 
         const imagePath = await response.text();
+        const cleanUrl = imagePath.replace(/"/g, '').trim();
+
+        // Validate that we got a valid image path
+        if (!cleanUrl) {
+          throw new Error("服务器返回空响应，图像生成失败");
+        }
+
         return {
           id: `img-${Date.now()}-${index}`,
-          url: imagePath.replace(/"/g, ''),
+          url: cleanUrl,
           prompt: currentPrompt,
           model: currentConfig.model,
           aspectRatio: currentConfig.aspectRatio,
@@ -545,9 +552,16 @@ const ImageGenerationPage: React.FC = () => {
       }
 
       const imagePath = await response.text();
+      const cleanUrl = imagePath.replace(/"/g, '').trim();
+
+      // Validate that we got a valid image path
+      if (!cleanUrl) {
+        throw new Error("服务器返回空响应，图像生成失败");
+      }
+
       const newImage: GeneratedImage = {
         ...failedImage,
-        url: imagePath.replace(/"/g, ''),
+        url: cleanUrl,
         error: undefined,
         createdAt: new Date().toISOString(),
       };
