@@ -172,11 +172,12 @@ const ImageGenerationPage: React.FC = () => {
 
   // Save sessions to localStorage
   const saveSessions = useCallback((newSessions: ChatSession[]) => {
+    // Always update React state first, regardless of localStorage success
+    setSessions(newSessions);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
-      setSessions(newSessions);
     } catch (error) {
-      console.error("Failed to save sessions:", error);
+      console.error("Failed to save sessions to localStorage:", error);
     }
   }, []);
 
