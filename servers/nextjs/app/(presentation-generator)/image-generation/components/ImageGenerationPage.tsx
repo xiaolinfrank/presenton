@@ -157,6 +157,7 @@ const ImageGenerationPage: React.FC = () => {
   const [config, setConfig] = useState<ImageGenerationConfig>(DEFAULT_CONFIG);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [previewReferenceImage, setPreviewReferenceImage] = useState<string | null>(null);  // base64 of reference image to preview
   const [showSettings, setShowSettings] = useState(true);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -948,10 +949,27 @@ const ImageGenerationPage: React.FC = () => {
                   {message.role === "user" ? (
                     // User Message
                     <div className="max-w-[80%] bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3">
-                      {message.referenceImageCount && message.referenceImageCount > 0 && (
-                        <div className="flex items-center gap-1 mb-2 pb-2 border-b border-white/20">
-                          <Paperclip className="w-3 h-3" />
-                          <span className="text-xs opacity-80">{message.referenceImageCount} 张参考图像</span>
+                      {message.referenceImageBase64s && message.referenceImageBase64s.length > 0 && (
+                        <div className="mb-3 pb-3 border-b border-white/20">
+                          <div className="flex items-center gap-1 mb-2">
+                            <Paperclip className="w-3 h-3" />
+                            <span className="text-xs opacity-80">{message.referenceImageBase64s.length} 张参考图像</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {message.referenceImageBase64s.map((base64, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setPreviewReferenceImage(base64)}
+                                className="w-12 h-12 rounded-lg overflow-hidden border-2 border-white/30 hover:border-white/60 transition-colors cursor-pointer"
+                              >
+                                <img
+                                  src={base64}
+                                  alt={`参考图像 ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -1361,6 +1379,27 @@ const ImageGenerationPage: React.FC = () => {
                     <Copy className="w-4 h-4 mr-2" />
                     复制提示词
                   </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reference Image Preview Dialog */}
+      <Dialog open={!!previewReferenceImage} onOpenChange={() => setPreviewReferenceImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95">
+          {previewReferenceImage && (
+            <div className="relative">
+              <img
+                src={previewReferenceImage}
+                alt="参考图像预览"
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-white/80" />
+                  <span className="text-white text-sm">参考图像</span>
                 </div>
               </div>
             </div>
