@@ -51,6 +51,12 @@ WORKDIR /app
 COPY servers/fastapi/ ./servers/fastapi/
 COPY start.js LICENSE NOTICE ./
 
+# Pre-download ONNX model for icon finder during build
+RUN python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
+    ef = ONNXMiniLM_L6_V2(); \
+    ef.DOWNLOAD_PATH = '/app/servers/fastapi/chroma/models'; \
+    ef._download_model_if_not_exists()"
+
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
