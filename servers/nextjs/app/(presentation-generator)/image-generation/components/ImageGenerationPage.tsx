@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Sparkles,
   Download,
@@ -20,11 +19,14 @@ import {
   Copy,
   Trash2,
   ZoomIn,
-  History,
-  Clock,
+  Plus,
+  MessageSquare,
+  Send,
+  Settings2,
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -34,6 +36,15 @@ import {
 } from "@/components/ui/dialog";
 
 // Types
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  images?: GeneratedImage[];
+  timestamp: string;
+  isLoading?: boolean;
+}
+
 interface GeneratedImage {
   id: string;
   url: string;
@@ -46,14 +57,13 @@ interface GeneratedImage {
   error?: string;
 }
 
-interface HistorySession {
+interface ChatSession {
   id: string;
-  prompt: string;
-  model: string;
-  aspectRatio: string;
-  resolution: string;
-  images: GeneratedImage[];
+  title: string;
+  messages: ChatMessage[];
+  config: ImageGenerationConfig;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface ImageGenerationConfig {
@@ -64,7 +74,7 @@ interface ImageGenerationConfig {
 }
 
 // Constants
-const STORAGE_KEY = "presenton_image_generation_history";
+const STORAGE_KEY = "presenton_image_chat_sessions";
 
 const MODELS = [
   { id: "gemini-3-pro-image-preview", name: "Nano Banana Pro", description: "高质量多模态图像生成" },
@@ -86,65 +96,115 @@ const ASPECT_RATIOS = [
 ];
 
 const RESOLUTIONS = [
-  { id: "1K", name: "1K", description: "标准 (~1024px)" },
-  { id: "2K", name: "2K", description: "高清 (~2048px)" },
-  { id: "4K", name: "4K", description: "超高清 (~4096px)" },
+  { id: "1K", name: "1K", description: "标准" },
+  { id: "2K", name: "2K", description: "高清" },
+  { id: "4K", name: "4K", description: "超高清" },
 ];
 
 const COUNTS = [1, 2, 3, 4];
 
-// Skeleton Loading Component
-const ImageSkeleton: React.FC<{ aspectRatio: string }> = ({ aspectRatio }) => {
-  return (
-    <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 aspect-square shadow-md">
-      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/40 to-transparent skeleton-shimmer" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-        <div className="w-16 h-16 rounded-full bg-gray-300/50 flex items-center justify-center mb-3 animate-pulse">
-          <Loader2 className="w-8 h-8 animate-spin" />
-        </div>
-        <p className="text-sm font-medium animate-pulse">生成中...</p>
-      </div>
-    </div>
-  );
+const DEFAULT_CONFIG: ImageGenerationConfig = {
+  model: "gemini-3-pro-image-preview",
+  count: 1,
+  aspectRatio: "1:1",
+  resolution: "1K",
+};
+
+// Helper function to generate title from first prompt
+const generateTitle = (prompt: string): string => {
+  const maxLength = 20;
+  if (prompt.length <= maxLength) return prompt;
+  return prompt.substring(0, maxLength) + "...";
 };
 
 const ImageGenerationPage: React.FC = () => {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [config, setConfig] = useState<ImageGenerationConfig>({
-    model: "gemini-3-pro-image-preview",
-    count: 1,
-    aspectRatio: "1:1",
-    resolution: "1K",
-  });
+  const [config, setConfig] = useState<ImageGenerationConfig>(DEFAULT_CONFIG);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
-  const [history, setHistory] = useState<HistorySession[]>([]);
-  const [showHistory, setShowHistory] = useState(true);
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load history from localStorage on mount
+  // Get current session
+  const currentSession = sessions.find(s => s.id === currentSessionId);
+
+  // Load sessions from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setHistory(parsed);
+        setSessions(parsed);
+        // Auto-select the most recent session if exists
+        if (parsed.length > 0) {
+          setCurrentSessionId(parsed[0].id);
+          setConfig(parsed[0].config);
+        }
       }
     } catch (error) {
-      console.error("Failed to load history:", error);
+      console.error("Failed to load sessions:", error);
     }
   }, []);
 
-  // Save history to localStorage
-  const saveHistory = useCallback((newHistory: HistorySession[]) => {
+  // Save sessions to localStorage
+  const saveSessions = useCallback((newSessions: ChatSession[]) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
-      setHistory(newHistory);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
+      setSessions(newSessions);
     } catch (error) {
-      console.error("Failed to save history:", error);
+      console.error("Failed to save sessions:", error);
     }
   }, []);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [currentSession?.messages]);
+
+  // Create new session
+  const handleNewSession = useCallback(() => {
+    const newSession: ChatSession = {
+      id: `session-${Date.now()}`,
+      title: "新对话",
+      messages: [],
+      config: { ...DEFAULT_CONFIG },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const newSessions = [newSession, ...sessions];
+    saveSessions(newSessions);
+    setCurrentSessionId(newSession.id);
+    setConfig(DEFAULT_CONFIG);
+    setPrompt("");
+  }, [sessions, saveSessions]);
+
+  // Select session
+  const handleSelectSession = useCallback((sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      setCurrentSessionId(sessionId);
+      setConfig(session.config);
+      setPrompt("");
+    }
+  }, [sessions]);
+
+  // Delete session
+  const handleDeleteSession = useCallback((sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSessions = sessions.filter(s => s.id !== sessionId);
+    saveSessions(newSessions);
+    if (currentSessionId === sessionId) {
+      setCurrentSessionId(newSessions.length > 0 ? newSessions[0].id : null);
+      if (newSessions.length > 0) {
+        setConfig(newSessions[0].config);
+      }
+    }
+    toast.success("会话已删除");
+  }, [sessions, currentSessionId, saveSessions]);
 
   const handleConfigChange = useCallback((key: keyof ImageGenerationConfig, value: string | number) => {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -156,32 +216,80 @@ const ImageGenerationPage: React.FC = () => {
       return;
     }
 
+    // Create session if none exists
+    let sessionId = currentSessionId;
+    let updatedSessions = [...sessions];
+
+    if (!sessionId) {
+      const newSession: ChatSession = {
+        id: `session-${Date.now()}`,
+        title: generateTitle(prompt),
+        messages: [],
+        config: { ...config },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updatedSessions = [newSession, ...sessions];
+      sessionId = newSession.id;
+      setCurrentSessionId(sessionId);
+    }
+
     setIsGenerating(true);
-    const sessionId = `session-${Date.now()}`;
     const currentPrompt = prompt;
     const currentConfig = { ...config };
 
-    // Create placeholder loading images
-    const placeholders: GeneratedImage[] = Array.from({ length: config.count }, (_, i) => ({
-      id: `${sessionId}-${i}`,
-      url: "",
-      prompt: currentPrompt,
-      model: currentConfig.model,
-      aspectRatio: currentConfig.aspectRatio,
-      resolution: currentConfig.resolution,
-      createdAt: new Date().toISOString(),
-      isLoading: true,
-    }));
+    // Build the enhanced prompt with aspect ratio
+    const enhancedPrompt = `${currentPrompt}（图像比例 ${currentConfig.aspectRatio}）`;
 
-    // Add placeholders to the current view
-    setGeneratedImages(prev => [...placeholders, ...prev]);
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}-user`,
+      role: "user",
+      content: currentPrompt,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Add assistant loading message
+    const loadingMessageId = `msg-${Date.now()}-assistant`;
+    const loadingMessage: ChatMessage = {
+      id: loadingMessageId,
+      role: "assistant",
+      content: "",
+      images: Array.from({ length: currentConfig.count }, (_, i) => ({
+        id: `img-${Date.now()}-${i}`,
+        url: "",
+        prompt: currentPrompt,
+        model: currentConfig.model,
+        aspectRatio: currentConfig.aspectRatio,
+        resolution: currentConfig.resolution,
+        createdAt: new Date().toISOString(),
+        isLoading: true,
+      })),
+      timestamp: new Date().toISOString(),
+      isLoading: true,
+    };
+
+    // Update session with messages
+    updatedSessions = updatedSessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          title: s.messages.length === 0 ? generateTitle(currentPrompt) : s.title,
+          messages: [...s.messages, userMessage, loadingMessage],
+          config: currentConfig,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    saveSessions(updatedSessions);
+    setPrompt("");
 
     // Generate images in parallel
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
-      console.log(`[${new Date().toISOString()}] Starting image generation ${index + 1}`);
       try {
         const params = new URLSearchParams({
-          prompt: currentPrompt,
+          prompt: enhancedPrompt,
           aspect_ratio: currentConfig.aspectRatio,
           image_size: currentConfig.resolution,
         });
@@ -196,13 +304,11 @@ const ImageGenerationPage: React.FC = () => {
         );
 
         if (!response.ok) {
-          // Try to parse error message from response
           let errorMessage = "图像生成失败";
           try {
             const errorData = await response.json();
             errorMessage = errorData.detail || errorMessage;
           } catch {
-            // If not JSON, use text
             const errorText = await response.text();
             if (errorText) errorMessage = errorText;
           }
@@ -210,8 +316,8 @@ const ImageGenerationPage: React.FC = () => {
         }
 
         const imagePath = await response.text();
-        const newImage: GeneratedImage = {
-          id: `${sessionId}-${index}`,
+        return {
+          id: `img-${Date.now()}-${index}`,
           url: imagePath.replace(/"/g, ''),
           prompt: currentPrompt,
           model: currentConfig.model,
@@ -220,21 +326,11 @@ const ImageGenerationPage: React.FC = () => {
           createdAt: new Date().toISOString(),
           isLoading: false,
         };
-
-        // Replace the placeholder with the actual image immediately when ready
-        setGeneratedImages(prev => prev.map(img =>
-          img.id === `${sessionId}-${index}` ? newImage : img
-        ));
-
-        console.log(`[${new Date().toISOString()}] Completed image generation ${index + 1}`);
-        return newImage;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "图像生成失败";
-        console.error(`[${new Date().toISOString()}] Image ${index + 1} generation error:`, errorMessage);
-
-        // Update placeholder to show error state instead of removing it
-        const errorImage: GeneratedImage = {
-          id: `${sessionId}-${index}`,
+        console.error(`Image ${index + 1} generation error:`, errorMessage);
+        return {
+          id: `img-${Date.now()}-${index}`,
           url: "",
           prompt: currentPrompt,
           model: currentConfig.model,
@@ -244,46 +340,46 @@ const ImageGenerationPage: React.FC = () => {
           isLoading: false,
           error: errorMessage,
         };
-
-        setGeneratedImages(prev => prev.map(img =>
-          img.id === `${sessionId}-${index}` ? errorImage : img
-        ));
-
-        return null;
       }
     };
 
-    // Launch all image generation requests in parallel
-    console.log(`[${new Date().toISOString()}] Launching ${currentConfig.count} parallel requests`);
-    const promises = Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i));
-    console.log(`[${new Date().toISOString()}] All promises created, waiting for completion`);
-    const results = await Promise.all(promises);
+    // Launch all requests in parallel
+    const results = await Promise.all(
+      Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
+    );
 
     const completedImages = results.filter((img): img is GeneratedImage => img !== null);
-    const hasError = completedImages.length < currentConfig.count;
+    const successfulImages = completedImages.filter(img => !img.error);
 
-    // Save to history if we have at least one successful image
-    if (completedImages.length > 0) {
-      const newSession: HistorySession = {
-        id: sessionId,
-        prompt: currentPrompt,
-        model: currentConfig.model,
-        aspectRatio: currentConfig.aspectRatio,
-        resolution: currentConfig.resolution,
-        images: completedImages,
-        createdAt: new Date().toISOString(),
-      };
+    // Update the assistant message with results
+    const finalSessions = updatedSessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          messages: s.messages.map(m => {
+            if (m.id === loadingMessageId) {
+              return {
+                ...m,
+                content: successfulImages.length > 0
+                  ? `已生成 ${successfulImages.length} 张图像`
+                  : "图像生成失败",
+                images: completedImages,
+                isLoading: false,
+              };
+            }
+            return m;
+          }),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return s;
+    });
+    saveSessions(finalSessions);
 
-      const newHistory = [newSession, ...history].slice(0, 50); // Keep last 50 sessions
-      saveHistory(newHistory);
-
-      toast.success(`成功生成 ${completedImages.length} 张图像`);
-    }
-
-    if (hasError && completedImages.length === 0) {
+    if (successfulImages.length > 0) {
+      toast.success(`成功生成 ${successfulImages.length} 张图像`);
+    } else {
       toast.error("图像生成失败，请重试");
-    } else if (hasError) {
-      toast.warning(`部分图像生成失败，成功 ${completedImages.length}/${currentConfig.count} 张`);
     }
 
     setIsGenerating(false);
@@ -312,64 +408,37 @@ const ImageGenerationPage: React.FC = () => {
     toast.success("提示词已复制");
   };
 
-  const handleDelete = (id: string) => {
-    setGeneratedImages(prev => prev.filter(img => img.id !== id));
-    toast.success("图像已删除");
-  };
-
-  const handleDeleteSession = (sessionId: string) => {
-    const newHistory = history.filter(s => s.id !== sessionId);
-    saveHistory(newHistory);
-    toast.success("历史记录已删除");
-  };
-
-  const handleClearHistory = () => {
-    saveHistory([]);
-    toast.success("历史记录已清空");
-  };
-
-  const handleLoadFromHistory = (session: HistorySession) => {
-    setPrompt(session.prompt);
-    setConfig({
-      model: session.model,
-      count: session.images.length,
-      aspectRatio: session.aspectRatio,
-      resolution: session.resolution,
-    });
-    toast.success("已加载历史配置");
-  };
-
-  const toggleSession = (sessionId: string) => {
-    setExpandedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
-  };
-
   const getModelName = (modelId: string) => {
     return MODELS.find(m => m.id === modelId)?.name || modelId;
   };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleString('zh-CN', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return "昨天";
+    } else if (diffDays < 7) {
+      return `${diffDays}天前`;
+    } else {
+      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    }
   };
 
-  // Filter out loading images for display count
-  const loadedImages = generatedImages.filter(img => !img.isLoading);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isGenerating && prompt.trim()) {
+        handleGenerate();
+      }
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <div className="h-[calc(100vh-64px)] flex bg-gray-50">
       {/* Add shimmer animation styles */}
       <style jsx global>{`
         @keyframes shimmer {
@@ -381,82 +450,240 @@ const ImageGenerationPage: React.FC = () => {
         }
       `}</style>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-full mb-4">
-            <Sparkles className="w-4 h-4 text-violet-600" />
-            <span className="text-sm font-medium text-violet-700">AI 图像生成</span>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            将想象变为现实
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            使用先进的 AI 模型，通过文字描述生成高质量图像
-          </p>
+      {/* Left Sidebar - Session History */}
+      <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
+        {/* New Chat Button */}
+        <div className="p-4 border-b border-gray-100">
+          <Button
+            onClick={handleNewSession}
+            className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            新建对话
+          </Button>
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Panel - Controls */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Prompt Input Card */}
-            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur">
-              <CardContent className="p-6 space-y-5">
-                {/* Model Selection */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Wand2 className="w-4 h-4 text-violet-500" />
-                    模型选择
-                  </label>
-                  <Select
-                    value={config.model}
-                    onValueChange={(value) => handleConfigChange("model", value)}
+        {/* Session List */}
+        <div className="flex-1 overflow-y-auto">
+          {sessions.length === 0 ? (
+            <div className="p-4 text-center text-gray-400">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">暂无对话</p>
+            </div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  onClick={() => handleSelectSession(session.id)}
+                  className={cn(
+                    "group p-3 rounded-lg cursor-pointer transition-colors",
+                    currentSessionId === session.id
+                      ? "bg-violet-50 border border-violet-200"
+                      : "hover:bg-gray-50"
+                  )}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "text-sm font-medium truncate",
+                        currentSessionId === session.id ? "text-violet-700" : "text-gray-700"
+                      )}>
+                        {session.title}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {formatDate(session.updatedAt)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => handleDeleteSession(session.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Storage Warning */}
+        <div className="p-3 border-t border-gray-100">
+          <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg text-amber-700">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <p className="text-xs">
+              对话保存在本地，清除缓存后将丢失
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Chat Messages */}
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-6"
+        >
+          {!currentSession || currentSession.messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-4">
+                <ImageIcon className="w-10 h-10 text-violet-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-700 mb-2">AI 图像生成</h2>
+              <p className="text-sm text-gray-500 mb-6">描述你想要的图像，AI 将为你创作</p>
+              <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                {["一只可爱的橘猫", "未来科技城市", "水彩风格的花园", "星空下的山脉"].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setPrompt(suggestion)}
+                    className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-full hover:border-violet-300 hover:bg-violet-50 transition-colors"
                   >
-                    <SelectTrigger className="w-full bg-gray-50 border-gray-200 focus:ring-violet-500 focus:border-violet-500">
-                      <SelectValue placeholder="选择模型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MODELS.map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-xs text-gray-500">{model.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-6">
+              {currentSession.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex",
+                    message.role === "user" ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {message.role === "user" ? (
+                    // User Message
+                    <div className="max-w-[80%] bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3">
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                  ) : (
+                    // Assistant Message
+                    <div className="max-w-[90%] space-y-3">
+                      {message.isLoading ? (
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">正在生成图像...</span>
+                        </div>
+                      ) : null}
 
-                {/* Prompt Textarea */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">
-                    图像描述
-                  </label>
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="描述你想要生成的图像...&#10;&#10;例如：一只可爱的橘猫正在阳光下的花园里玩耍，周围有蝴蝶飞舞，画面温馨明亮，采用水彩画风格"
-                    className="min-h-[160px] bg-gray-50 border-gray-200 focus:ring-violet-500 focus:border-violet-500 resize-none"
-                  />
-                  <p className="text-xs text-gray-500">
-                    提示：详细的描述可以获得更好的结果
-                  </p>
+                      {message.images && message.images.length > 0 && (
+                        <div className={cn(
+                          "grid gap-3",
+                          message.images.length === 1 ? "grid-cols-1" :
+                          message.images.length === 2 ? "grid-cols-2" :
+                          message.images.length === 3 ? "grid-cols-3" : "grid-cols-2"
+                        )}>
+                          {message.images.map((image) => (
+                            image.isLoading ? (
+                              // Loading skeleton
+                              <div
+                                key={image.id}
+                                className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 aspect-square shadow-md"
+                              >
+                                <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/40 to-transparent skeleton-shimmer" />
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                                  <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                                  <p className="text-sm">生成中...</p>
+                                </div>
+                              </div>
+                            ) : image.error ? (
+                              // Error state
+                              <div
+                                key={image.id}
+                                className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-50 to-red-100 aspect-square shadow-md border border-red-200"
+                              >
+                                <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                  <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
+                                  <p className="text-sm font-medium text-red-600 mb-1">生成失败</p>
+                                  <p className="text-xs text-red-500 line-clamp-3">{image.error}</p>
+                                </div>
+                              </div>
+                            ) : (
+                              // Success image
+                              <div
+                                key={image.id}
+                                className="group relative rounded-xl overflow-hidden bg-gray-100 aspect-square shadow-md hover:shadow-xl transition-shadow cursor-pointer"
+                                onClick={() => setSelectedImage(image)}
+                              >
+                                <img
+                                  src={image.url}
+                                  alt={image.prompt}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                  <div className="opacity-0 group-hover:opacity-100 flex gap-2 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedImage(image);
+                                      }}
+                                      className="p-2 bg-white/90 hover:bg-white rounded-lg"
+                                    >
+                                      <ZoomIn className="w-4 h-4 text-gray-700" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownload(image);
+                                      }}
+                                      className="p-2 bg-white/90 hover:bg-white rounded-lg"
+                                    >
+                                      <Download className="w-4 h-4 text-gray-700" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {/* Configuration Grid */}
-                <div className="grid grid-cols-2 gap-4">
+        {/* Input Area */}
+        <div className="border-t border-gray-200 bg-white p-4">
+          <div className="max-w-4xl mx-auto">
+            {/* Settings Panel */}
+            {showSettings && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Model */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-600">模型</label>
+                    <Select
+                      value={config.model}
+                      onValueChange={(value) => handleConfigChange("model", value)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MODELS.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Count */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">
-                      生成数量
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-600">数量</label>
                     <Select
                       value={config.count.toString()}
                       onValueChange={(value) => handleConfigChange("count", parseInt(value))}
                     >
-                      <SelectTrigger className="w-full bg-gray-50 border-gray-200">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -470,358 +697,88 @@ const ImageGenerationPage: React.FC = () => {
                   </div>
 
                   {/* Aspect Ratio */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">
-                      宽高比
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-600">宽高比</label>
                     <Select
                       value={config.aspectRatio}
                       onValueChange={(value) => handleConfigChange("aspectRatio", value)}
                     >
-                      <SelectTrigger className="w-full bg-gray-50 border-gray-200">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {ASPECT_RATIOS.map((ratio) => (
                           <SelectItem key={ratio.id} value={ratio.id}>
-                            <span className="font-medium">{ratio.name}</span>
-                            <span className="text-xs text-gray-500 ml-2">{ratio.description}</span>
+                            {ratio.name} - {ratio.description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Resolution */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-600">分辨率</label>
+                    <Select
+                      value={config.resolution}
+                      onValueChange={(value) => handleConfigChange("resolution", value)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESOLUTIONS.map((res) => (
+                          <SelectItem key={res.id} value={res.id}>
+                            {res.name} - {res.description}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Resolution */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">
-                    分辨率
-                  </label>
-                  <Select
-                    value={config.resolution}
-                    onValueChange={(value) => handleConfigChange("resolution", value)}
-                  >
-                    <SelectTrigger className="w-full bg-gray-50 border-gray-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RESOLUTIONS.map((res) => (
-                        <SelectItem key={res.id} value={res.id}>
-                          <span className="font-medium">{res.name}</span>
-                          <span className="text-xs text-gray-500 ml-2">{res.description}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {/* Input Row */}
+            <div className="flex items-end gap-3">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={cn(
+                  "p-2.5 rounded-lg transition-colors",
+                  showSettings
+                    ? "bg-violet-100 text-violet-600"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}
+              >
+                <Settings2 className="w-5 h-5" />
+              </button>
+
+              <div className="flex-1 relative">
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="描述你想要生成的图像... (Enter 发送, Shift+Enter 换行)"
+                  className="min-h-[48px] max-h-[200px] pr-12 resize-none rounded-xl border-gray-200 focus:border-violet-400 focus:ring-violet-400"
+                  rows={1}
+                />
+                <div className="absolute right-2 bottom-2 flex items-center gap-1 text-xs text-gray-400">
+                  <span className="px-1.5 py-0.5 bg-gray-100 rounded">{config.aspectRatio}</span>
                 </div>
+              </div>
 
-                {/* Generate Button */}
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                  className="w-full h-12 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5 mr-2" />
-                      生成图像
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Tips Card */}
-            <Card className="border-0 shadow-md bg-gradient-to-br from-violet-50 to-purple-50">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-gray-800 mb-3">提示技巧</h3>
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-start gap-2">
-                    <span className="text-violet-500 mt-1">•</span>
-                    描述主体、场景、光线和氛围
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-violet-500 mt-1">•</span>
-                    指定艺术风格（如水彩、油画、3D渲染）
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-violet-500 mt-1">•</span>
-                    使用具体的颜色和材质描述
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-violet-500 mt-1">•</span>
-                    参考知名艺术家或作品风格
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Panel - Generated Images */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Current Generation Results */}
-            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur min-h-[400px]">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <ImageIcon className="w-5 h-5 text-violet-500" />
-                    生成结果
-                  </h2>
-                  {loadedImages.length > 0 && (
-                    <span className="text-sm text-gray-500">
-                      {loadedImages.length} 张图像
-                    </span>
-                  )}
-                </div>
-
-                {generatedImages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
-                    <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                      <ImageIcon className="w-12 h-12" />
-                    </div>
-                    <p className="text-lg font-medium">暂无生成的图像</p>
-                    <p className="text-sm mt-1">输入描述并点击生成按钮开始创作</p>
-                  </div>
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+                className="h-12 px-4 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {generatedImages.map((image) => (
-                      image.isLoading ? (
-                        <ImageSkeleton key={image.id} aspectRatio={image.aspectRatio} />
-                      ) : image.error ? (
-                        // Error state
-                        <div
-                          key={image.id}
-                          className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-50 to-red-100 aspect-square shadow-md border border-red-200"
-                        >
-                          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-                            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-3">
-                              <AlertCircle className="w-8 h-8 text-red-500" />
-                            </div>
-                            <p className="text-sm font-medium text-red-700 mb-2">生成失败</p>
-                            <p className="text-xs text-red-600 line-clamp-4 max-w-[90%]">
-                              {image.error}
-                            </p>
-                            <button
-                              onClick={() => handleDelete(image.id)}
-                              className="mt-3 px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              移除
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
-                          key={image.id}
-                          className="group relative rounded-xl overflow-hidden bg-gray-100 aspect-square shadow-md hover:shadow-xl transition-shadow duration-300"
-                        >
-                          <img
-                            src={image.url}
-                            alt={image.prompt}
-                            className="w-full h-full object-cover"
-                          />
-
-                          {/* Overlay on hover */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            {/* Top Actions */}
-                            <div className="absolute top-3 right-3 flex gap-2">
-                              <button
-                                onClick={() => setSelectedImage(image)}
-                                className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
-                                title="放大查看"
-                              >
-                                <ZoomIn className="w-4 h-4 text-gray-700" />
-                              </button>
-                              <button
-                                onClick={() => handleDownload(image)}
-                                className="p-2 bg-white/90 hover:bg-white rounded-lg shadow-lg transition-colors"
-                                title="下载图像"
-                              >
-                                <Download className="w-4 h-4 text-gray-700" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(image.id)}
-                                className="p-2 bg-white/90 hover:bg-red-50 rounded-lg shadow-lg transition-colors"
-                                title="删除图像"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </button>
-                            </div>
-
-                            {/* Bottom Info */}
-                            <div className="absolute bottom-0 left-0 right-0 p-4">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
-                                  {getModelName(image.model)}
-                                </span>
-                                <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
-                                  {image.aspectRatio}
-                                </span>
-                              </div>
-                              <p className="text-sm text-white/90 line-clamp-2 mb-2">
-                                {image.prompt}
-                              </p>
-                              <button
-                                onClick={() => handleCopyPrompt(image.prompt)}
-                                className="flex items-center gap-1 text-xs text-white/80 hover:text-white transition-colors"
-                              >
-                                <Copy className="w-3 h-3" />
-                                复制提示词
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    ))}
-                  </div>
+                  <Send className="w-5 h-5" />
                 )}
-              </CardContent>
-            </Card>
-
-            {/* History Section */}
-            <Card className="border-0 shadow-lg shadow-gray-200/50 bg-white/80 backdrop-blur">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <button
-                    onClick={() => setShowHistory(!showHistory)}
-                    className="flex items-center gap-2 text-lg font-semibold text-gray-800 hover:text-violet-600 transition-colors"
-                  >
-                    <History className="w-5 h-5 text-violet-500" />
-                    生成历史
-                    {showHistory ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
-                  {history.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleClearHistory}
-                      className="text-gray-500 hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      清空历史
-                    </Button>
-                  )}
-                </div>
-
-                {/* Storage Warning */}
-                <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg mb-4 text-amber-800">
-                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs">
-                    历史记录保存在浏览器本地存储中。清除浏览器缓存或更换浏览器后，历史记录将会丢失。
-                  </p>
-                </div>
-
-                {showHistory && (
-                  <>
-                    {history.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm">暂无历史记录</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                        {history.map((session) => (
-                          <div
-                            key={session.id}
-                            className="border border-gray-200 rounded-xl overflow-hidden hover:border-violet-300 transition-colors"
-                          >
-                            {/* Session Header */}
-                            <div
-                              className="p-4 bg-gray-50 cursor-pointer"
-                              onClick={() => toggleSession(session.id)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xs px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">
-                                      {getModelName(session.model)}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {session.images.length} 张图像
-                                    </span>
-                                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      {formatDate(session.createdAt)}
-                                    </span>
-                                  </div>
-                                  <p className="text-sm text-gray-700 line-clamp-2">
-                                    {session.prompt}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2 ml-4">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleLoadFromHistory(session);
-                                    }}
-                                    className="text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                                  >
-                                    <Copy className="w-3 h-3 mr-1" />
-                                    使用
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteSession(session.id);
-                                    }}
-                                    className="text-gray-400 hover:text-red-500"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                  {expandedSessions.has(session.id) ? (
-                                    <ChevronUp className="w-4 h-4 text-gray-400" />
-                                  ) : (
-                                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Session Images */}
-                            {expandedSessions.has(session.id) && (
-                              <div className="p-4 border-t border-gray-200 bg-white">
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                  {session.images.map((image) => (
-                                    <div
-                                      key={image.id}
-                                      className="group relative rounded-lg overflow-hidden bg-gray-100 aspect-square cursor-pointer"
-                                      onClick={() => setSelectedImage(image)}
-                                    >
-                                      <img
-                                        src={image.url}
-                                        alt={image.prompt}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                      />
-                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                        <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -837,8 +794,19 @@ const ImageGenerationPage: React.FC = () => {
                 className="w-full h-auto max-h-[80vh] object-contain"
               />
               <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-                <p className="text-white text-sm">{selectedImage.prompt}</p>
-                <div className="flex items-center gap-4 mt-3">
+                <p className="text-white text-sm mb-3">{selectedImage.prompt}</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {getModelName(selectedImage.model)}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {selectedImage.aspectRatio}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-white/20 backdrop-blur rounded-full text-white">
+                    {selectedImage.resolution}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-3">
                   <Button
                     onClick={() => handleDownload(selectedImage)}
                     variant="secondary"
