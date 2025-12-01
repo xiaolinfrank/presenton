@@ -40,47 +40,15 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import {
+  imageSessionStorage,
+  type ChatSession,
+  type ChatMessage,
+  type GeneratedImage,
+  type ImageGenerationConfig,
+} from "../lib/imageSessionStorage";
 
-// Types
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  images?: GeneratedImage[];
-  referenceImageCount?: number;  // Track how many reference images were used
-  referenceImageBase64s?: string[];  // Store base64 for retry functionality
-  timestamp: string;
-  isLoading?: boolean;
-}
-
-interface GeneratedImage {
-  id: string;
-  url: string;
-  prompt: string;
-  model: string;
-  aspectRatio: string;
-  resolution: string;
-  createdAt: string;
-  isLoading?: boolean;
-  error?: string;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  config: ImageGenerationConfig;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ImageGenerationConfig {
-  model: string;
-  count: number;
-  aspectRatio: string;
-  resolution: string;
-}
-
+// Local types (not exported from lib)
 interface ReferenceImage {
   id: string;
   file: File;
@@ -89,7 +57,6 @@ interface ReferenceImage {
 }
 
 // Constants
-const STORAGE_KEY = "presenton_image_chat_sessions";
 
 const MODELS = [
   {
@@ -166,46 +133,32 @@ const ImageGenerationPage: React.FC = () => {
   // Get current session
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  // Load sessions from localStorage on mount
+  // Load sessions from IndexedDB on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setSessions(parsed);
+    const loadSessions = async () => {
+      try {
+        const storedSessions = await imageSessionStorage.getAllSessions();
+        setSessions(storedSessions);
         // Auto-select the most recent session if exists
-        if (parsed.length > 0) {
-          setCurrentSessionId(parsed[0].id);
-          setConfig(parsed[0].config);
+        if (storedSessions.length > 0) {
+          setCurrentSessionId(storedSessions[0].id);
+          setConfig(storedSessions[0].config);
         }
+      } catch (error) {
+        console.error("Failed to load sessions:", error);
       }
-    } catch (error) {
-      console.error("Failed to load sessions:", error);
-    }
+    };
+    loadSessions();
   }, []);
 
-  // Save sessions to localStorage
+  // Save sessions to IndexedDB
   const saveSessions = useCallback((newSessions: ChatSession[]) => {
-    // Always update React state first, regardless of localStorage success
+    // Always update React state first
     setSessions(newSessions);
-    try {
-      // Strip out referenceImageBase64s before saving to localStorage to avoid quota issues
-      // The base64 data is only needed in memory for retry functionality within the session
-      const sessionsForStorage = newSessions.map(session => ({
-        ...session,
-        messages: session.messages.map(msg => {
-          if (msg.referenceImageBase64s) {
-            // Keep the count but remove the actual base64 data
-            const { referenceImageBase64s, ...rest } = msg;
-            return rest;
-          }
-          return msg;
-        }),
-      }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
-    } catch (error) {
-      console.error("Failed to save sessions to localStorage:", error);
-    }
+    // Save to IndexedDB asynchronously (no quota issues with IndexedDB)
+    imageSessionStorage.saveSessions(newSessions).catch(error => {
+      console.error("Failed to save sessions to IndexedDB:", error);
+    });
   }, []);
 
   // Scroll to bottom when messages change
@@ -644,22 +597,10 @@ const ImageGenerationPage: React.FC = () => {
         return s;
       });
 
-      // Save to localStorage (strip base64 data)
-      try {
-        const sessionsForStorage = finalSessions.map(session => ({
-          ...session,
-          messages: session.messages.map(msg => {
-            if (msg.referenceImageBase64s) {
-              const { referenceImageBase64s, ...rest } = msg;
-              return rest;
-            }
-            return msg;
-          }),
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
-      } catch (error) {
-        console.error("Failed to save sessions to localStorage:", error);
-      }
+      // Save to IndexedDB (no quota issues, keep all data including base64)
+      imageSessionStorage.saveSessions(finalSessions).catch(error => {
+        console.error("Failed to save sessions to IndexedDB:", error);
+      });
 
       return finalSessions;
     });
@@ -828,22 +769,10 @@ const ImageGenerationPage: React.FC = () => {
           return s;
         });
 
-        // Save to localStorage (strip base64 data)
-        try {
-          const sessionsForStorage = updatedSessions.map(session => ({
-            ...session,
-            messages: session.messages.map(msg => {
-              if (msg.referenceImageBase64s) {
-                const { referenceImageBase64s, ...rest } = msg;
-                return rest;
-              }
-              return msg;
-            }),
-          }));
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
-        } catch (error) {
-          console.error("Failed to save sessions to localStorage:", error);
-        }
+        // Save to IndexedDB (no quota issues, keep all data including base64)
+        imageSessionStorage.saveSessions(updatedSessions).catch(error => {
+          console.error("Failed to save sessions to IndexedDB:", error);
+        });
 
         return updatedSessions;
       });
