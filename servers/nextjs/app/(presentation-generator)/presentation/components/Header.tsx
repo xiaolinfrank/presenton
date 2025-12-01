@@ -266,11 +266,6 @@ const Header = ({
         <Wrapper className="flex items-center justify-between py-1">
           <Link href="/dashboard" className="min-w-[162px]">
             <div className="flex items-center gap-2">
-              <img
-                className="h-12"
-                src="/company-logo.jpg"
-                alt="公司Logo"
-              />
               <div className="flex flex-col text-white">
                 <span className="text-xs font-medium">深圳汇芯生物医疗科技</span>
                 <span className="text-[10px] opacity-80">AI 创新及应用部</span>

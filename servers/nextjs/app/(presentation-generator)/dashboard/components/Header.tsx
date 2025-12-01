@@ -17,11 +17,6 @@ const Header = () => {
           <div className="flex items-center gap-3">
             {(pathname !== "/upload" && pathname !== "/dashboard") && <BackBtn />}
             <Link href="/dashboard" onClick={() => trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/dashboard" })} className="flex items-center gap-3">
-              <img
-                src="/company-logo.jpg"
-                alt="公司Logo"
-                className="h-12 w-auto"
-              />
               <div className="flex flex-col text-white">
                 <span className="text-sm font-medium">深圳汇芯生物医疗科技有限公司</span>
                 <span className="text-xs opacity-80">AI 创新及应用部</span>
