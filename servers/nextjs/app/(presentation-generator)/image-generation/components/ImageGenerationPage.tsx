@@ -27,6 +27,10 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  RefreshCw,
+  Zap,
+  Palette,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -77,9 +81,27 @@ interface ImageGenerationConfig {
 const STORAGE_KEY = "presenton_image_chat_sessions";
 
 const MODELS = [
-  { id: "gemini-3-pro-image-preview", name: "Nano Banana Pro", description: "高质量多模态图像生成" },
-  { id: "dall-e-3", name: "DALL-E 3", description: "OpenAI 图像生成模型" },
-  { id: "gpt-image-1", name: "GPT Image 1", description: "GPT 系列图像模型" },
+  {
+    id: "gemini-3-pro-image-preview",
+    name: "Nano Banana Pro",
+    description: "高质量多模态图像生成",
+    icon: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+    color: "from-yellow-400 to-orange-500"
+  },
+  {
+    id: "dall-e-3",
+    name: "DALL-E 3",
+    description: "OpenAI 图像生成模型",
+    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
+    color: "from-green-400 to-teal-500"
+  },
+  {
+    id: "gpt-image-1",
+    name: "GPT Image 1",
+    description: "GPT 系列图像模型",
+    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
+    color: "from-blue-400 to-indigo-500"
+  },
 ];
 
 const ASPECT_RATIOS = [
@@ -124,7 +146,7 @@ const ImageGenerationPage: React.FC = () => {
   const [config, setConfig] = useState<ImageGenerationConfig>(DEFAULT_CONFIG);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Get current session
@@ -477,6 +499,85 @@ const ImageGenerationPage: React.FC = () => {
     return MODELS.find(m => m.id === modelId)?.name || modelId;
   };
 
+  const getModelInfo = (modelId: string) => {
+    return MODELS.find(m => m.id === modelId);
+  };
+
+  // Retry failed image generation
+  const handleRetry = async (failedImage: GeneratedImage) => {
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    toast.info("正在重新生成图像...");
+
+    const enhancedPrompt = `${failedImage.prompt}（图像比例 ${failedImage.aspectRatio}）`;
+
+    // Get the current session's existing messages for conversation history
+    const existingMessages = currentSession?.messages.filter(m => !m.isLoading) || [];
+    const conversationHistory = await buildConversationHistory(
+      existingMessages.slice(0, -1), // Exclude the last assistant message with the failed image
+      enhancedPrompt
+    );
+
+    try {
+      const response = await fetch("/api/v1/ppt/images/chat/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: conversationHistory,
+          aspect_ratio: failedImage.aspectRatio,
+          image_size: failedImage.resolution,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "图像生成失败";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const imagePath = await response.text();
+      const newImage: GeneratedImage = {
+        ...failedImage,
+        url: imagePath.replace(/"/g, ''),
+        error: undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Update the session with the new image
+      const updatedSessions = sessions.map(s => {
+        if (s.id === currentSessionId) {
+          return {
+            ...s,
+            messages: s.messages.map(m => ({
+              ...m,
+              images: m.images?.map(img =>
+                img.id === failedImage.id ? newImage : img
+              ),
+            })),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return s;
+      });
+      saveSessions(updatedSessions);
+      toast.success("图像重新生成成功");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+      toast.error(`重试失败: ${errorMessage}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -656,15 +757,29 @@ const ImageGenerationPage: React.FC = () => {
                                 </div>
                               </div>
                             ) : image.error ? (
-                              // Error state
+                              // Error state with retry button
                               <div
                                 key={image.id}
                                 className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-50 to-red-100 aspect-square shadow-md border border-red-200"
                               >
                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-                                  <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-                                  <p className="text-sm font-medium text-red-600 mb-1">生成失败</p>
-                                  <p className="text-xs text-red-500 line-clamp-3">{image.error}</p>
+                                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                                    <AlertCircle className="w-6 h-6 text-red-500" />
+                                  </div>
+                                  <p className="text-sm font-medium text-red-700 mb-1">生成失败</p>
+                                  <p className="text-xs text-red-500 line-clamp-2 mb-3 max-w-[90%]">{image.error}</p>
+                                  <button
+                                    onClick={() => handleRetry(image)}
+                                    disabled={isGenerating}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-lg transition-colors"
+                                  >
+                                    {isGenerating ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-3 h-3" />
+                                    )}
+                                    重试
+                                  </button>
                                 </div>
                               </div>
                             ) : (
@@ -717,38 +832,74 @@ const ImageGenerationPage: React.FC = () => {
         {/* Input Area */}
         <div className="border-t border-gray-200 bg-white p-4">
           <div className="max-w-4xl mx-auto">
-            {/* Settings Panel */}
+            {/* Settings Panel - Always visible by default */}
             {showSettings && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Model */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">模型</label>
-                    <Select
-                      value={config.model}
-                      onValueChange={(value) => handleConfigChange("model", value)}
-                    >
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {MODELS.map((model) => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              <div className="mb-4 p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 shadow-sm">
+                {/* Model Selection - Card Style */}
+                <div className="mb-4">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 block flex items-center gap-1.5">
+                    <Bot className="w-3.5 h-3.5" />
+                    模型选择
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {MODELS.map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => handleConfigChange("model", model.id)}
+                        className={cn(
+                          "relative p-3 rounded-lg border-2 transition-all text-left",
+                          config.model === model.id
+                            ? "border-violet-500 bg-violet-50 shadow-md"
+                            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center",
+                            model.color
+                          )}>
+                            <img
+                              src={model.icon}
+                              alt={model.name}
+                              className="w-5 h-5"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "text-sm font-medium truncate",
+                              config.model === model.id ? "text-violet-700" : "text-gray-800"
+                            )}>
+                              {model.name}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">{model.description}</p>
+                          </div>
+                        </div>
+                        {config.model === model.id && (
+                          <div className="absolute top-1 right-1">
+                            <div className="w-2 h-2 rounded-full bg-violet-500" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
+                {/* Other Settings - Horizontal Row */}
+                <div className="grid grid-cols-3 gap-3">
                   {/* Count */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">数量</label>
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      数量
+                    </label>
                     <Select
                       value={config.count.toString()}
                       onValueChange={(value) => handleConfigChange("count", parseInt(value))}
                     >
-                      <SelectTrigger className="h-9 text-sm">
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -763,18 +914,22 @@ const ImageGenerationPage: React.FC = () => {
 
                   {/* Aspect Ratio */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">宽高比</label>
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <Palette className="w-3 h-3" />
+                      宽高比
+                    </label>
                     <Select
                       value={config.aspectRatio}
                       onValueChange={(value) => handleConfigChange("aspectRatio", value)}
                     >
-                      <SelectTrigger className="h-9 text-sm">
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {ASPECT_RATIOS.map((ratio) => (
                           <SelectItem key={ratio.id} value={ratio.id}>
-                            {ratio.name} - {ratio.description}
+                            <span className="font-medium">{ratio.name}</span>
+                            <span className="text-gray-400 ml-1">· {ratio.description}</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -783,12 +938,15 @@ const ImageGenerationPage: React.FC = () => {
 
                   {/* Resolution */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">分辨率</label>
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />
+                      分辨率
+                    </label>
                     <Select
                       value={config.resolution}
                       onValueChange={(value) => handleConfigChange("resolution", value)}
                     >
-                      <SelectTrigger className="h-9 text-sm">
+                      <SelectTrigger className="h-10 bg-white border-gray-200 hover:border-gray-300">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
