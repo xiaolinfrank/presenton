@@ -48,6 +48,7 @@ interface ChatMessage {
   content: string;
   images?: GeneratedImage[];
   referenceImageCount?: number;  // Track how many reference images were used
+  referenceImageBase64s?: string[];  // Store base64 for retry functionality
   timestamp: string;
   isLoading?: boolean;
 }
@@ -451,12 +452,16 @@ const ImageGenerationPage: React.FC = () => {
     // Build the enhanced prompt with aspect ratio
     const enhancedPrompt = `${currentPrompt}（图像比例 ${currentConfig.aspectRatio}）`;
 
-    // Add user message (track reference image count)
+    // Add user message (track reference image count and base64s for retry)
+    const refBase64s = referenceImages.length > 0
+      ? referenceImages.map(img => img.base64).filter((b): b is string => !!b)
+      : undefined;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-user`,
       role: "user",
       content: currentPrompt,
       referenceImageCount: referenceImages.length > 0 ? referenceImages.length : undefined,
+      referenceImageBase64s: refBase64s,
       timestamp: new Date().toISOString(),
     };
 
@@ -683,6 +688,22 @@ const ImageGenerationPage: React.FC = () => {
       m.images?.some(img => img.id === failedImage.id)
     );
 
+    // Find the user message that triggered this generation (it's right before the assistant message)
+    // The user message contains the reference images used for this generation
+    let userMessageWithRefs: ChatMessage | undefined;
+    if (failedMessageIndex > 0) {
+      // Look for the user message right before the failed assistant message
+      for (let i = failedMessageIndex - 1; i >= 0; i--) {
+        if (allMessages[i].role === "user") {
+          userMessageWithRefs = allMessages[i];
+          break;
+        }
+      }
+    }
+
+    // Get reference image base64s from the original user message
+    const refImageBase64sForRetry = userMessageWithRefs?.referenceImageBase64s;
+
     // Include all messages BEFORE the failed image's message
     // For assistant messages, buildConversationHistory will only include successful images
     // Example: if failed image is in msg3, include msg0, msg1, msg2
@@ -694,9 +715,20 @@ const ImageGenerationPage: React.FC = () => {
       ? allMessages.slice(0, failedMessageIndex)  // All messages before the failed image's message
       : [];
 
+    // Build conversation history with reference images if they exist
+    // Convert base64 strings to ReferenceImage format for buildConversationHistory
+    const refImagesForHistory: ReferenceImage[] | undefined = refImageBase64sForRetry?.map((base64, i) => ({
+      id: `retry-ref-${i}`,
+      file: new File([], ""),  // Dummy file, not needed for retry
+      previewUrl: "",
+      base64,
+    }));
+
     const conversationHistory = await buildConversationHistory(
       messagesForHistory,
-      enhancedPrompt
+      enhancedPrompt,
+      undefined,
+      refImagesForHistory
     );
 
     try {
