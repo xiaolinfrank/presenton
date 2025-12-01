@@ -17,9 +17,11 @@ IMAGES_ROUTER = APIRouter(prefix="/images", tags=["Images"])
 
 
 # Models for multi-turn chat
+from typing import Union, Any
+
 class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
-    content: str  # Text content or image in markdown format
+    content: Union[str, List[Any]]  # Text content or multimodal content array
 
 
 class ChatGenerateRequest(BaseModel):

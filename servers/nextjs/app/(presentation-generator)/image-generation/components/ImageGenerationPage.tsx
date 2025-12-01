@@ -253,16 +253,18 @@ const ImageGenerationPage: React.FC = () => {
     }
   };
 
-  // Build conversation history for API request
+  // Build conversation history for API request (OpenAI multimodal format)
   const buildConversationHistory = async (
     sessionMessages: ChatMessage[],
-    newPrompt: string
-  ): Promise<Array<{ role: string; content: string }>> => {
-    const messages: Array<{ role: string; content: string }> = [];
+    newPrompt: string,
+    currentUserMessageId?: string  // ID of current user message to exclude
+  ): Promise<Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}>> => {
+    const messages: Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}>}> = [];
 
-    // Process existing messages (exclude loading messages)
+    // Process existing messages (exclude loading messages and current user message)
     for (const msg of sessionMessages) {
       if (msg.isLoading) continue;
+      if (currentUserMessageId && msg.id === currentUserMessageId) continue;  // Skip current user message
 
       if (msg.role === "user") {
         messages.push({
@@ -270,17 +272,22 @@ const ImageGenerationPage: React.FC = () => {
           content: msg.content,
         });
       } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
-        // For assistant messages with images, convert first successful image to base64
-        // Use the same markdown format as API returns: ![image](data:image/png;base64,...)
+        // For assistant messages with images, use OpenAI multimodal format
         const successfulImage = msg.images.find(img => img.url && !img.error);
         if (successfulImage) {
           try {
             const base64 = await imageUrlToBase64(successfulImage.url);
             if (base64) {
               console.log("Converted image to base64, length:", base64.length);
+              // Use OpenAI-compatible multimodal format
               messages.push({
                 role: "assistant",
-                content: `![image](${base64})`,
+                content: [
+                  {
+                    type: "image_url",
+                    image_url: { url: base64 }
+                  }
+                ],
               });
             } else {
               console.warn("Failed to convert image to base64, skipping");
@@ -381,12 +388,14 @@ const ImageGenerationPage: React.FC = () => {
     const existingMessages = existingSession?.messages.filter(m => m.id !== loadingMessageId) || [];
 
     // Build conversation history (this converts images to base64)
-    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt);
+    // Pass userMessage.id to exclude the current user message (we add it with enhanced prompt)
+    const conversationHistory = await buildConversationHistory(existingMessages, enhancedPrompt, userMessage.id);
     console.log(`Multi-turn chat: ${conversationHistory.length} messages in history`);
     console.log("Conversation history:", JSON.stringify(conversationHistory.map(m => ({
       role: m.role,
-      contentLength: m.content.length,
-      contentPreview: m.content.substring(0, 200)
+      contentType: typeof m.content === 'string' ? 'string' : 'array',
+      contentLength: typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length,
+      contentPreview: typeof m.content === 'string' ? m.content.substring(0, 200) : '[multimodal content]'
     })), null, 2));
 
     // Generate images in parallel using multi-turn API
