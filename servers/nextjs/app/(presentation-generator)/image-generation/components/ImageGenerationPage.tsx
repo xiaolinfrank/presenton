@@ -460,8 +460,23 @@ const ImageGenerationPage: React.FC = () => {
       Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
     );
 
-    const completedImages = results.filter((img): img is GeneratedImage => img !== null);
+    let completedImages = results.filter((img): img is GeneratedImage => img !== null);
     const successfulImages = completedImages.filter(img => !img.error);
+
+    // Ensure we always have at least one image (even if it's an error) to show in the UI
+    if (completedImages.length === 0) {
+      completedImages = [{
+        id: `img-${Date.now()}-error`,
+        url: "",
+        prompt: currentPrompt,
+        model: currentConfig.model,
+        aspectRatio: currentConfig.aspectRatio,
+        resolution: currentConfig.resolution,
+        createdAt: new Date().toISOString(),
+        isLoading: false,
+        error: "图像生成失败，请重试",
+      }];
+    }
 
     // Update the assistant message with results
     const finalSessions = updatedSessions.map(s => {
