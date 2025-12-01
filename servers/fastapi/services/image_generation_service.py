@@ -61,7 +61,8 @@ class ImageGenerationService:
         self,
         prompt: ImagePrompt,
         aspect_ratio: str = "1:1",
-        image_size: str = "1K"
+        image_size: str = "1K",
+        raise_on_error: bool = False
     ) -> str | ImageAsset:
         """
         Generates an image based on the provided prompt.
@@ -69,13 +70,20 @@ class ImageGenerationService:
         - If the stock provider is selected, it uses the prompt directly,
         otherwise it uses the full image prompt with theme.
         - Output Directory is used for saving the generated image not the stock provider.
+        - If raise_on_error is True, exceptions are re-raised instead of returning placeholder.
         """
         if self.is_image_generation_disabled:
-            print("Image generation is disabled. Using placeholder image.")
+            msg = "Image generation is disabled."
+            print(msg)
+            if raise_on_error:
+                raise Exception(msg)
             return "/static/images/placeholder.jpg"
 
         if not self.image_gen_func:
-            print("No image generation function found. Using placeholder image.")
+            msg = "No image generation function found. Check IMAGE_PROVIDER configuration."
+            print(msg)
+            if raise_on_error:
+                raise Exception(msg)
             return "/static/images/placeholder.jpg"
 
         image_prompt = prompt.get_image_prompt(
@@ -111,6 +119,8 @@ class ImageGenerationService:
 
         except Exception as e:
             print(f"Error generating image: {e}")
+            if raise_on_error:
+                raise
             return "/static/images/placeholder.jpg"
 
     async def generate_image_openai(self, prompt: str, output_directory: str) -> str:
@@ -194,18 +204,22 @@ class ImageGenerationService:
         client = AsyncOpenAI(**client_kwargs)
         model = get_openai_image_model_env() or "gemini-3-pro-image-preview"
 
+        print(f"OpenAI Chat Image Generation - Model: {model}, Aspect Ratio: {aspect_ratio}, Image Size: {image_size}")
+
         # Use chat completions API for image generation with extra_body for custom parameters
+        # The prompt must clearly instruct the model to generate an image, not describe how to generate one
         response = await client.chat.completions.create(
             model=model,
             messages=[
                 {
                     "role": "user",
-                    "content": f"Generate an image: {prompt}"
+                    "content": f"Please generate an image directly (do not describe or explain, just create the image): {prompt}"
                 }
             ],
             stream=False,
             extra_body={
                 "generationConfig": {
+                    "responseModalities": ["TEXT", "IMAGE"],
                     "imageConfig": {
                         "aspectRatio": aspect_ratio,
                         "imageSize": image_size

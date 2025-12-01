@@ -43,6 +43,7 @@ interface GeneratedImage {
   resolution: string;
   createdAt: string;
   isLoading?: boolean;
+  error?: string;
 }
 
 interface HistorySession {
@@ -194,7 +195,17 @@ const ImageGenerationPage: React.FC = () => {
         );
 
         if (!response.ok) {
-          throw new Error("图像生成失败");
+          // Try to parse error message from response
+          let errorMessage = "图像生成失败";
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorMessage;
+          } catch {
+            // If not JSON, use text
+            const errorText = await response.text();
+            if (errorText) errorMessage = errorText;
+          }
+          throw new Error(errorMessage);
         }
 
         const imagePath = await response.text();
@@ -216,9 +227,26 @@ const ImageGenerationPage: React.FC = () => {
 
         return newImage;
       } catch (error) {
-        console.error(`Image ${index + 1} generation error:`, error);
-        // Remove failed placeholder
-        setGeneratedImages(prev => prev.filter(img => img.id !== `${sessionId}-${index}`));
+        const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+        console.error(`Image ${index + 1} generation error:`, errorMessage);
+
+        // Update placeholder to show error state instead of removing it
+        const errorImage: GeneratedImage = {
+          id: `${sessionId}-${index}`,
+          url: "",
+          prompt: currentPrompt,
+          model: currentConfig.model,
+          aspectRatio: currentConfig.aspectRatio,
+          resolution: currentConfig.resolution,
+          createdAt: new Date().toISOString(),
+          isLoading: false,
+          error: errorMessage,
+        };
+
+        setGeneratedImages(prev => prev.map(img =>
+          img.id === `${sessionId}-${index}` ? errorImage : img
+        ));
+
         return null;
       }
     };
@@ -562,6 +590,29 @@ const ImageGenerationPage: React.FC = () => {
                     {generatedImages.map((image) => (
                       image.isLoading ? (
                         <ImageSkeleton key={image.id} aspectRatio={image.aspectRatio} />
+                      ) : image.error ? (
+                        // Error state
+                        <div
+                          key={image.id}
+                          className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-50 to-red-100 aspect-square shadow-md border border-red-200"
+                        >
+                          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                              <AlertCircle className="w-8 h-8 text-red-500" />
+                            </div>
+                            <p className="text-sm font-medium text-red-700 mb-2">生成失败</p>
+                            <p className="text-xs text-red-600 line-clamp-4 max-w-[90%]">
+                              {image.error}
+                            </p>
+                            <button
+                              onClick={() => handleDelete(image.id)}
+                              className="mt-3 px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              移除
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <div
                           key={image.id}

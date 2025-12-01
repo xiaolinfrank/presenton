@@ -26,11 +26,16 @@ async def generate_image(
     image_prompt = ImagePrompt(prompt=prompt)
     image_generation_service = ImageGenerationService(images_directory)
 
-    image = await image_generation_service.generate_image(
-        image_prompt,
-        aspect_ratio=aspect_ratio,
-        image_size=image_size
-    )
+    try:
+        image = await image_generation_service.generate_image(
+            image_prompt,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            raise_on_error=True
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     if not isinstance(image, ImageAsset):
         return image
 
