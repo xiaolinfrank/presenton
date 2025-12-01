@@ -1,5 +1,6 @@
 FROM python:3.11-slim-bookworm
 
+
 # Install Node.js and npm
 RUN apt-get update && apt-get install -y \
     nginx \
@@ -23,8 +24,16 @@ ENV TEMP_DIRECTORY=/tmp/presenton
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 
+# Proxy configuration
+ENV HTTP_PROXY=http://172.16.15.16:7890
+ENV HTTPS_PROXY=http://172.16.15.16:7890
+ENV http_proxy=http://172.16.15.16:7890
+ENV https_proxy=http://172.16.15.16:7890
+ENV NO_PROXY=localhost,127.0.0.1,::1
+ENV no_proxy=localhost,127.0.0.1,::1
+
 # Install ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Install dependencies for FastAPI
 RUN pip install aiohttp aiomysql aiosqlite asyncpg fastapi[standard] \
@@ -50,6 +59,12 @@ WORKDIR /app
 # Copy FastAPI
 COPY servers/fastapi/ ./servers/fastapi/
 COPY start.js LICENSE NOTICE ./
+
+# Pre-download ONNX model for icon finder during build
+RUN python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
+    ef = ONNXMiniLM_L6_V2(); \
+    ef.DOWNLOAD_PATH = '/app/servers/fastapi/chroma/models'; \
+    ef._download_model_if_not_exists()"
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
