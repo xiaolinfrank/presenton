@@ -66,7 +66,7 @@ interface ImageGenerationConfig {
 const STORAGE_KEY = "presenton_image_generation_history";
 
 const MODELS = [
-  { id: "gemini-3-pro-image-preview", name: "Nano Banana 3", description: "高质量多模态图像生成" },
+  { id: "gemini-3-pro-image-preview", name: "Nano Banana Pro", description: "高质量多模态图像生成" },
   { id: "dall-e-3", name: "DALL-E 3", description: "OpenAI 图像生成模型" },
   { id: "gpt-image-1", name: "GPT Image 1", description: "GPT 系列图像模型" },
 ];
@@ -175,11 +175,8 @@ const ImageGenerationPage: React.FC = () => {
     // Add placeholders to the current view
     setGeneratedImages(prev => [...placeholders, ...prev]);
 
-    const completedImages: GeneratedImage[] = [];
-    let hasError = false;
-
-    // Generate images one by one and replace placeholders
-    for (let i = 0; i < currentConfig.count; i++) {
+    // Generate images in parallel
+    const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
       try {
         const params = new URLSearchParams({
           prompt: currentPrompt,
@@ -202,7 +199,7 @@ const ImageGenerationPage: React.FC = () => {
 
         const imagePath = await response.text();
         const newImage: GeneratedImage = {
-          id: `${sessionId}-${i}`,
+          id: `${sessionId}-${index}`,
           url: imagePath.replace(/"/g, ''),
           prompt: currentPrompt,
           model: currentConfig.model,
@@ -212,19 +209,27 @@ const ImageGenerationPage: React.FC = () => {
           isLoading: false,
         };
 
-        completedImages.push(newImage);
-
-        // Replace the placeholder with the actual image
+        // Replace the placeholder with the actual image immediately when ready
         setGeneratedImages(prev => prev.map(img =>
-          img.id === `${sessionId}-${i}` ? newImage : img
+          img.id === `${sessionId}-${index}` ? newImage : img
         ));
+
+        return newImage;
       } catch (error) {
-        console.error(`Image ${i + 1} generation error:`, error);
-        hasError = true;
+        console.error(`Image ${index + 1} generation error:`, error);
         // Remove failed placeholder
-        setGeneratedImages(prev => prev.filter(img => img.id !== `${sessionId}-${i}`));
+        setGeneratedImages(prev => prev.filter(img => img.id !== `${sessionId}-${index}`));
+        return null;
       }
-    }
+    };
+
+    // Launch all image generation requests in parallel
+    const results = await Promise.all(
+      Array.from({ length: currentConfig.count }, (_, i) => generateSingleImage(i))
+    );
+
+    const completedImages = results.filter((img): img is GeneratedImage => img !== null);
+    const hasError = completedImages.length < currentConfig.count;
 
     // Save to history if we have at least one successful image
     if (completedImages.length > 0) {
