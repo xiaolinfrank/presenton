@@ -456,6 +456,7 @@ const ImageGenerationPage: React.FC = () => {
     console.log("Completed images:", completedImages.length);
     console.log("Successful images:", successfulImages.length);
     console.log("Error images:", completedImages.filter(img => img.error).length);
+    console.log("Completed images details:", JSON.stringify(completedImages, null, 2));
 
     // Update the assistant message with results
     const finalSessions = updatedSessions.map(s => {
@@ -480,6 +481,11 @@ const ImageGenerationPage: React.FC = () => {
       }
       return s;
     });
+    // Log the final message being saved
+    const finalMessage = finalSessions.find(s => s.id === sessionId)?.messages.find(m => m.id === loadingMessageId);
+    console.log("Final message images:", finalMessage?.images?.length);
+    console.log("Final message isLoading:", finalMessage?.isLoading);
+
     saveSessions(finalSessions);
 
     if (successfulImages.length > 0) {
