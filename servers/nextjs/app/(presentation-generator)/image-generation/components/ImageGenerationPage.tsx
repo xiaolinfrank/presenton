@@ -189,7 +189,20 @@ const ImageGenerationPage: React.FC = () => {
     // Always update React state first, regardless of localStorage success
     setSessions(newSessions);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
+      // Strip out referenceImageBase64s before saving to localStorage to avoid quota issues
+      // The base64 data is only needed in memory for retry functionality within the session
+      const sessionsForStorage = newSessions.map(session => ({
+        ...session,
+        messages: session.messages.map(msg => {
+          if (msg.referenceImageBase64s) {
+            // Keep the count but remove the actual base64 data
+            const { referenceImageBase64s, ...rest } = msg;
+            return rest;
+          }
+          return msg;
+        }),
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
     } catch (error) {
       console.error("Failed to save sessions to localStorage:", error);
     }
@@ -605,31 +618,51 @@ const ImageGenerationPage: React.FC = () => {
       }];
     }
 
-    // Update the assistant message with results
-    const finalSessions = updatedSessions.map(s => {
-      if (s.id === sessionId) {
-        return {
-          ...s,
-          messages: s.messages.map(m => {
-            if (m.id === loadingMessageId) {
-              return {
-                ...m,
-                content: successfulImages.length > 0
-                  ? `已生成 ${successfulImages.length} 张图像`
-                  : "图像生成失败",
-                images: completedImages,
-                isLoading: false,
-              };
-            }
-            return m;
-          }),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return s;
-    });
+    // Update the assistant message with results using functional update
+    // This ensures we're working with the latest state
+    setSessions(currentSessions => {
+      const finalSessions = currentSessions.map(s => {
+        if (s.id === sessionId) {
+          return {
+            ...s,
+            messages: s.messages.map(m => {
+              if (m.id === loadingMessageId) {
+                return {
+                  ...m,
+                  content: successfulImages.length > 0
+                    ? `已生成 ${successfulImages.length} 张图像`
+                    : "图像生成失败",
+                  images: completedImages,
+                  isLoading: false,
+                };
+              }
+              return m;
+            }),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return s;
+      });
 
-    saveSessions(finalSessions);
+      // Save to localStorage (strip base64 data)
+      try {
+        const sessionsForStorage = finalSessions.map(session => ({
+          ...session,
+          messages: session.messages.map(msg => {
+            if (msg.referenceImageBase64s) {
+              const { referenceImageBase64s, ...rest } = msg;
+              return rest;
+            }
+            return msg;
+          }),
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
+      } catch (error) {
+        console.error("Failed to save sessions to localStorage:", error);
+      }
+
+      return finalSessions;
+    });
 
     if (successfulImages.length > 0) {
       toast.success(`成功生成 ${successfulImages.length} 张图像`);
@@ -777,23 +810,43 @@ const ImageGenerationPage: React.FC = () => {
         createdAt: new Date().toISOString(),
       };
 
-      // Update the session with the new image
-      const updatedSessions = sessions.map(s => {
-        if (s.id === currentSessionId) {
-          return {
-            ...s,
-            messages: s.messages.map(m => ({
-              ...m,
-              images: m.images?.map(img =>
-                img.id === failedImage.id ? newImage : img
-              ),
-            })),
-            updatedAt: new Date().toISOString(),
-          };
+      // Update the session with the new image using functional update
+      setSessions(currentSessions => {
+        const updatedSessions = currentSessions.map(s => {
+          if (s.id === currentSessionId) {
+            return {
+              ...s,
+              messages: s.messages.map(m => ({
+                ...m,
+                images: m.images?.map(img =>
+                  img.id === failedImage.id ? newImage : img
+                ),
+              })),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return s;
+        });
+
+        // Save to localStorage (strip base64 data)
+        try {
+          const sessionsForStorage = updatedSessions.map(session => ({
+            ...session,
+            messages: session.messages.map(msg => {
+              if (msg.referenceImageBase64s) {
+                const { referenceImageBase64s, ...rest } = msg;
+                return rest;
+              }
+              return msg;
+            }),
+          }));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionsForStorage));
+        } catch (error) {
+          console.error("Failed to save sessions to localStorage:", error);
         }
-        return s;
+
+        return updatedSessions;
       });
-      saveSessions(updatedSessions);
       toast.success("图像重新生成成功");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "图像生成失败";
