@@ -38,7 +38,7 @@ ENV no_proxy=localhost,127.0.0.1,::1
 # Install dependencies for FastAPI
 RUN pip install aiohttp aiomysql aiosqlite asyncpg fastapi[standard] \
     pathvalidate pdfplumber chromadb sqlmodel \
-    anthropic google-genai openai fastmcp dirtyjson
+    anthropic google-genai openai fastmcp dirtyjson gradio_client
 RUN pip install docling --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies for Next.js

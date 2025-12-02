@@ -34,6 +34,10 @@ def is_openai_chat_selected() -> bool:
     return ImageProvider.OPENAI_CHAT == get_selected_image_provider()
 
 
+def is_z_image_selected() -> bool:
+    return ImageProvider.Z_IMAGE == get_selected_image_provider()
+
+
 def get_selected_image_provider() -> ImageProvider | None:
     """
     Get the selected image provider from environment variables.
@@ -58,5 +62,7 @@ def get_image_provider_api_key() -> str:
         return get_openai_api_key_env()
     elif selected_image_provider == ImageProvider.OPENAI_CHAT:
         return get_openai_api_key_env()
+    elif selected_image_provider == ImageProvider.Z_IMAGE:
+        return None  # Z-Image uses Hugging Face Spaces, no API key needed
     else:
         raise ValueError(f"Invalid image provider: {selected_image_provider}")
