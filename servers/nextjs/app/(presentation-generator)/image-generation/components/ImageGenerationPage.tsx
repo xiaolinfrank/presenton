@@ -71,7 +71,7 @@ const MODELS = [
     id: "z-image",
     name: "Z-Image",
     description: "通义万相图像生成（单轮对话）",
-    icon: "https://img.alicdn.com/imgextra/i1/O1CN01AKUdEM1oPxONqfuQY_!!6000000005219-2-tps-512-512.png",
+    icon: "https://huggingface.co/front/assets/huggingface_logo-noborder.svg",
     color: "from-purple-400 to-pink-500",
     singleTurnOnly: true,  // Z-Image only supports single-turn conversations
   },
