@@ -1395,7 +1395,7 @@ const ImageGenerationPage: React.FC = () => {
               <div className="flex-1 relative">
                 <Textarea
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={referenceImages.length > 0 ? "描述你想基于参考图像生成的内容..." : "描述你想要生成的图像... (Enter 发送, Shift+Enter 换行)"}
                   className="min-h-[48px] max-h-[200px] pr-12 resize-none rounded-xl border-gray-200 focus:border-violet-400 focus:ring-violet-400"

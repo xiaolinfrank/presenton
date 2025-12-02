@@ -140,7 +140,7 @@ export const EditControls: React.FC<EditControlsProps> = ({
             id="edit-prompt"
             placeholder="Enter your prompt here... (e.g., 'Change the title color to blue', 'Add a border to the image', etc.)"
             value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onPromptChange(e.target.value)}
             className="flex-1 font-inter duration-300 h-[70px] border-blue-200 border-2 rounded-lg outline-none focus:border-blue-500 focus:ring-0 max-h-[70px] resize-none"
             disabled={isUpdating}
           />

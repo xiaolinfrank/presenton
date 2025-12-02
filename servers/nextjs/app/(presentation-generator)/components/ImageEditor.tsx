@@ -310,7 +310,7 @@ const ImageEditor = ({
                     <Textarea
                       placeholder="Describe the image you want to generate..."
                       value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
                       className="min-h-[100px]"
                     />
                   </div>

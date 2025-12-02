@@ -86,7 +86,7 @@ export const SaveLayoutModal: React.FC<SaveLayoutModalProps> = ({
             <Textarea
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
               placeholder="Enter a description for your template..."
               disabled={isSaving}
               className="w-full resize-none"

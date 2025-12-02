@@ -346,7 +346,7 @@ export function ConfigurationSelects({
               <Textarea
                 value={advancedDraft.instructions}
                 rows={4}
-                onChange={(e) => setAdvancedDraft((prev) => ({ ...prev, instructions: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAdvancedDraft((prev) => ({ ...prev, instructions: e.target.value }))}
                 placeholder="示例：面向企业用户，强调投资回报和安全合规。保持数据驱动风格，避免行业术语，在最后一张幻灯片添加简短的行动号召。"
                 className="py-2 px-3 border-2 font-medium text-sm min-h-[100px] max-h-[200px] border-blue-200 focus-visible:ring-offset-0 focus-visible:ring-blue-300"
               />
