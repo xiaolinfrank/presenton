@@ -1101,15 +1101,15 @@ const ImageGenerationPage: React.FC = () => {
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span className="text-sm">正在生成图像...</span>
                         </div>
-                      ) : !message.images || message.images.length === 0 ? (
-                        // No images - show error message with retry
+                      ) : (!message.images || message.images.length === 0 || (message.images.length > 0 && message.images.every(img => !!(img.error || !img.url)))) ? (
+                        // No images OR all images failed - show error message with retry
                         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                             <AlertCircle className="w-5 h-5 text-red-500" />
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-red-700">图像生成失败</p>
-                            <p className="text-xs text-red-500 mt-0.5">{message.content || "请重试"}</p>
+                            <p className="text-xs text-red-500 mt-0.5">{message.content === "图像生成失败" ? "所有图像生成均失败，请重试" : message.content || "请重试"}</p>
                           </div>
                           <Button
                             onClick={() => handleRetryMessage(message)}
@@ -1128,7 +1128,7 @@ const ImageGenerationPage: React.FC = () => {
                         </div>
                       ) : null}
 
-                      {message.images && message.images.length > 0 && (
+                      {message.images && message.images.length > 0 && !message.images.every(img => !!(img.error || !img.url)) && (
                         <div className={cn(
                           "grid gap-3",
                           message.images.length === 1 ? "grid-cols-1" :
