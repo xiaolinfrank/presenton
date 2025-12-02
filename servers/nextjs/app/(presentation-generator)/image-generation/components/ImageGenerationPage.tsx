@@ -64,21 +64,16 @@ const MODELS = [
     name: "Nano Banana Pro",
     description: "高质量多模态图像生成",
     icon: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
-    color: "from-yellow-400 to-orange-500"
+    color: "from-yellow-400 to-orange-500",
+    singleTurnOnly: false,
   },
   {
-    id: "dall-e-3",
-    name: "DALL-E 3",
-    description: "OpenAI 图像生成模型",
-    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
-    color: "from-green-400 to-teal-500"
-  },
-  {
-    id: "gpt-image-1",
-    name: "GPT Image 1",
-    description: "GPT 系列图像模型",
-    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
-    color: "from-blue-400 to-indigo-500"
+    id: "z-image",
+    name: "Z-Image",
+    description: "通义万相图像生成（单轮对话）",
+    icon: "https://huggingface.co/front/assets/huggingface_logo-noborder.svg",
+    color: "from-purple-400 to-pink-500",
+    singleTurnOnly: true,  // Z-Image only supports single-turn conversations
   },
 ];
 
@@ -211,7 +206,16 @@ const ImageGenerationPage: React.FC = () => {
 
   const handleConfigChange = useCallback((key: keyof ImageGenerationConfig, value: string | number) => {
     setConfig(prev => ({ ...prev, [key]: value }));
-  }, []);
+    // Clear reference images when switching to a single-turn model
+    if (key === "model") {
+      const newModel = MODELS.find(m => m.id === value);
+      if (newModel?.singleTurnOnly && referenceImages.length > 0) {
+        referenceImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+        setReferenceImages([]);
+        toast.info("单轮模型不支持参考图像，已清除");
+      }
+    }
+  }, [referenceImages]);
 
   // Handle reference image upload
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -481,20 +485,40 @@ const ImageGenerationPage: React.FC = () => {
     // Clear reference images after starting generation
     handleClearReferenceImages();
 
-    // Generate images in parallel using multi-turn API
+    // Check if the current model is Z-Image (single-turn only)
+    const isZImageModel = currentConfig.model === "z-image";
+
+    // Generate images in parallel using multi-turn API (or single-turn for Z-Image)
     const generateSingleImage = async (index: number): Promise<GeneratedImage | null> => {
       try {
-        const response = await fetch("/api/v1/ppt/images/chat/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: conversationHistory,
-            aspect_ratio: currentConfig.aspectRatio,
-            image_size: currentConfig.resolution,
-          }),
-        });
+        let response: Response;
+
+        if (isZImageModel) {
+          // Z-Image uses a dedicated endpoint and only supports single-turn
+          response = await fetch("/api/v1/ppt/images/z-image/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: enhancedPrompt,
+              aspect_ratio: currentConfig.aspectRatio,
+            }),
+          });
+        } else {
+          // Other models use multi-turn chat endpoint
+          response = await fetch("/api/v1/ppt/images/chat/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messages: conversationHistory,
+              aspect_ratio: currentConfig.aspectRatio,
+              image_size: currentConfig.resolution,
+            }),
+          });
+        }
 
         if (!response.ok) {
           let errorMessage = "图像生成失败";
@@ -609,6 +633,14 @@ const ImageGenerationPage: React.FC = () => {
 
     if (successfulImages.length > 0) {
       toast.success(`成功生成 ${successfulImages.length} 张图像`);
+      // Show single-turn reminder for Z-Image model
+      if (isZImageModel) {
+        setTimeout(() => {
+          toast.info("Z-Image 模型仅支持单轮对话，建议新建对话进行下一次生成", {
+            duration: 5000,
+          });
+        }, 500);
+      }
     } else {
       toast.error("图像生成失败，请重试");
     }
@@ -708,18 +740,38 @@ const ImageGenerationPage: React.FC = () => {
       refImagesForHistory
     );
 
+    // Check if the failed image was generated with Z-Image model
+    const isZImageModel = failedImage.model === "z-image";
+
     try {
-      const response = await fetch("/api/v1/ppt/images/chat/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: conversationHistory,
-          aspect_ratio: failedImage.aspectRatio,
-          image_size: failedImage.resolution,
-        }),
-      });
+      let response: Response;
+
+      if (isZImageModel) {
+        // Z-Image uses dedicated endpoint (single-turn only)
+        response = await fetch("/api/v1/ppt/images/z-image/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: enhancedPrompt,
+            aspect_ratio: failedImage.aspectRatio,
+          }),
+        });
+      } else {
+        // Other models use multi-turn chat endpoint
+        response = await fetch("/api/v1/ppt/images/chat/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: conversationHistory,
+            aspect_ratio: failedImage.aspectRatio,
+            image_size: failedImage.resolution,
+          }),
+        });
+      }
 
       if (!response.ok) {
         let errorMessage = "图像生成失败";
@@ -780,6 +832,14 @@ const ImageGenerationPage: React.FC = () => {
         return updatedSessions;
       });
       toast.success("图像重新生成成功");
+      // Show single-turn reminder for Z-Image model
+      if (isZImageModel) {
+        setTimeout(() => {
+          toast.info("Z-Image 模型仅支持单轮对话，建议新建对话进行下一次生成", {
+            duration: 5000,
+          });
+        }, 500);
+      }
     } catch (error) {
       let errorMessage = error instanceof Error ? error.message : "图像生成失败";
       if (!errorMessage) errorMessage = "图像生成失败";
@@ -1191,12 +1251,19 @@ const ImageGenerationPage: React.FC = () => {
                             />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={cn(
-                              "text-sm font-medium truncate",
-                              config.model === model.id ? "text-violet-700" : "text-gray-800"
-                            )}>
-                              {model.name}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className={cn(
+                                "text-sm font-medium truncate",
+                                config.model === model.id ? "text-violet-700" : "text-gray-800"
+                              )}>
+                                {model.name}
+                              </p>
+                              {model.singleTurnOnly && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded">
+                                  单轮
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500 truncate">{model.description}</p>
                           </div>
                         </div>
@@ -1309,19 +1376,21 @@ const ImageGenerationPage: React.FC = () => {
                 <Settings2 className="w-5 h-5" />
               </button>
 
-              {/* Upload button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  "p-2.5 rounded-lg transition-colors",
-                  referenceImages.length > 0
-                    ? "bg-violet-100 text-violet-600"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                )}
-                title="上传参考图像"
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
+              {/* Upload button - hidden for single-turn models like Z-Image */}
+              {!MODELS.find(m => m.id === config.model)?.singleTurnOnly && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "p-2.5 rounded-lg transition-colors",
+                    referenceImages.length > 0
+                      ? "bg-violet-100 text-violet-600"
+                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  )}
+                  title="上传参考图像"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+              )}
 
               <div className="flex-1 relative">
                 <Textarea

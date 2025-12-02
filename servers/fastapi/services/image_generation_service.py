@@ -28,6 +28,7 @@ from utils.image_provider import (
     is_gemini_flash_selected,
     is_dalle3_selected,
     is_openai_chat_selected,
+    is_z_image_selected,
 )
 import uuid
 
@@ -52,6 +53,8 @@ class ImageGenerationService:
             return self.generate_image_openai
         elif is_openai_chat_selected():
             return self.generate_image_openai_chat
+        elif is_z_image_selected():
+            return self.generate_image_z_image
         return None
 
     def is_stock_provider_selected(self):
@@ -98,6 +101,11 @@ class ImageGenerationService:
                 # Pass aspect_ratio and image_size for OpenAI Chat-based image generation
                 image_path = await self.image_gen_func(
                     image_prompt, self.output_directory, aspect_ratio, image_size
+                )
+            elif is_z_image_selected():
+                # Pass aspect_ratio for Z-Image generation
+                image_path = await self.image_gen_func(
+                    image_prompt, self.output_directory, aspect_ratio
                 )
             else:
                 image_path = await self.image_gen_func(
@@ -460,3 +468,95 @@ class ImageGenerationService:
             data = await response.json()
             image_url = data["hits"][0]["largeImageURL"]
             return image_url
+
+    async def generate_image_z_image(
+        self,
+        prompt: str,
+        output_directory: str,
+        aspect_ratio: str = "1:1"
+    ) -> str:
+        """
+        Generate image using Tongyi-MAI/Z-Image-Turbo via Gradio API.
+        This model only supports single-turn conversations.
+
+        Args:
+            prompt: The image generation prompt
+            output_directory: Directory to save the generated image
+            aspect_ratio: Aspect ratio in format "W:H" (e.g., "1:1", "16:9")
+
+        Returns:
+            Path to the generated image
+        """
+        import shutil
+        from gradio_client import Client
+
+        # Map aspect ratio to Z-Image resolution format
+        # Z-Image uses format like "1024x1024 ( 1:1 )"
+        aspect_ratio_map = {
+            "1:1": "1024x1024 ( 1:1 )",
+            "9:7": "1152x896 ( 9:7 )",
+            "7:9": "896x1152 ( 7:9 )",
+            "4:3": "1152x864 ( 4:3 )",
+            "3:4": "864x1152 ( 3:4 )",
+            "3:2": "1248x832 ( 3:2 )",
+            "2:3": "832x1248 ( 2:3 )",
+            "16:9": "1280x720 ( 16:9 )",
+            "9:16": "720x1280 ( 9:16 )",
+            "21:9": "1344x576 ( 21:9 )",
+            "9:21": "576x1344 ( 9:21 )",
+            # Additional larger resolutions
+            "4:5": "1024x1280 ( 4:5 )",  # Map 4:5 to closest available
+            "5:4": "1280x1024 ( 5:4 )",  # Map 5:4 to closest available
+        }
+
+        # Default to 1:1 if aspect ratio not found
+        resolution = aspect_ratio_map.get(aspect_ratio, "1024x1024 ( 1:1 )")
+
+        print(f"Z-Image Generation - Prompt: {prompt[:100]}..., Resolution: {resolution}")
+
+        # Run gradio client in thread pool to avoid blocking
+        def call_z_image():
+            client = Client("Tongyi-MAI/Z-Image-Turbo")
+            result = client.predict(
+                prompt=prompt,
+                resolution=resolution,
+                seed=42,
+                steps=8,
+                shift=3,
+                random_seed=True,
+                gallery_images=[],
+                api_name="/generate"
+            )
+            return result
+
+        result = await asyncio.to_thread(call_z_image)
+
+        print(f"Z-Image Result: {result}")
+
+        # Extract image path from result
+        # The result is a tuple: (gallery, seed_str, seed_int)
+        # gallery is list[dict(image: dict(path: str, ...), ...)]
+        gallery = result[0]
+        if not gallery or len(gallery) == 0:
+            raise Exception("Z-Image returned empty gallery")
+
+        first_item = gallery[0]
+        image_path = None
+
+        # Handle potential variations in return structure
+        if isinstance(first_item, dict):
+            if 'image' in first_item and isinstance(first_item['image'], dict) and 'path' in first_item['image']:
+                image_path = first_item['image']['path']
+            elif 'image' in first_item and isinstance(first_item['image'], str):
+                image_path = first_item['image']
+
+        if not image_path or not os.path.exists(image_path):
+            raise Exception(f"Could not extract valid image path from Z-Image result: {first_item}")
+
+        # Copy image to output directory
+        file_name = f"{uuid.uuid4()}.png"
+        dest_path = os.path.join(output_directory, file_name)
+        shutil.copy(image_path, dest_path)
+
+        print(f"Z-Image: Image saved to {dest_path}")
+        return dest_path

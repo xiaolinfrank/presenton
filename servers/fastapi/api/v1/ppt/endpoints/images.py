@@ -258,3 +258,77 @@ async def delete_uploaded_image_by_id(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
+
+
+class ZImageGenerateRequest(BaseModel):
+    """Request model for Z-Image generation (single-turn only)."""
+    prompt: str
+    aspect_ratio: str = "1:1"
+
+
+@IMAGES_ROUTER.post("/z-image/generate")
+async def generate_image_z_image(
+    http_request: Request,
+    request: ZImageGenerateRequest,
+    sql_session: AsyncSession = Depends(get_async_session)
+):
+    """
+    Generate image using Z-Image model (Tongyi-MAI/Z-Image-Turbo).
+    This endpoint is specifically for Z-Image which only supports single-turn conversations.
+    After each generation, users should start a new conversation.
+    """
+    # Start logging
+    logger = get_image_generation_logger()
+    access_source = get_access_source_from_request(http_request)
+    start_time = time.time()
+
+    log_id = logger.log_request(
+        request_type="z-image/generate",
+        prompt=request.prompt,
+        aspect_ratio=request.aspect_ratio,
+        image_size="1K",  # Z-Image has fixed resolution based on aspect ratio
+        **access_source
+    )
+
+    images_directory = get_images_directory()
+    image_generation_service = ImageGenerationService(images_directory)
+
+    try:
+        image = await image_generation_service.generate_image_z_image(
+            prompt=request.prompt,
+            output_directory=images_directory,
+            aspect_ratio=request.aspect_ratio,
+        )
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000
+        logger.update_log_with_response(
+            log_id=log_id,
+            success=False,
+            error_message=str(e),
+            duration_ms=duration_ms
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Create ImageAsset for database storage
+    image_asset = ImageAsset(
+        path=image,
+        is_uploaded=False,
+        extras={
+            "prompt": request.prompt,
+            "model": "z-image",
+            "aspect_ratio": request.aspect_ratio,
+        },
+    )
+
+    sql_session.add(image_asset)
+    await sql_session.commit()
+
+    duration_ms = (time.time() - start_time) * 1000
+    logger.update_log_with_response(
+        log_id=log_id,
+        success=True,
+        result_path=image,
+        duration_ms=duration_ms
+    )
+
+    return image
