@@ -392,11 +392,14 @@ const ImageGenerationPage: React.FC = () => {
     return messages;
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
+  const handleGenerate = async (overridePrompt?: string, overrideConfig?: ImageGenerationConfig) => {
+    const currentPrompt = overridePrompt || prompt;
+    if (!currentPrompt.trim()) {
       toast.error("请输入图像描述");
       return;
     }
+
+    const currentConfig = overrideConfig || { ...config };
 
     // Create session if none exists
     let sessionId = currentSessionId;
@@ -405,9 +408,9 @@ const ImageGenerationPage: React.FC = () => {
     if (!sessionId) {
       const newSession: ChatSession = {
         id: `session-${Date.now()}`,
-        title: generateTitle(prompt),
+        title: generateTitle(currentPrompt),
         messages: [],
-        config: { ...config },
+        config: { ...currentConfig },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -417,8 +420,6 @@ const ImageGenerationPage: React.FC = () => {
     }
 
     setIsGenerating(true);
-    const currentPrompt = prompt;
-    const currentConfig = { ...config };
 
     // Build the enhanced prompt with aspect ratio
     const enhancedPrompt = `${currentPrompt}（图像比例 ${currentConfig.aspectRatio}）`;
@@ -470,7 +471,9 @@ const ImageGenerationPage: React.FC = () => {
       return s;
     });
     saveSessions(updatedSessions);
-    setPrompt("");
+    if (!overridePrompt) {
+      setPrompt("");
+    }
 
     // Get the current session's existing messages for conversation history
     const existingSession = updatedSessions.find(s => s.id === sessionId);
@@ -679,12 +682,49 @@ const ImageGenerationPage: React.FC = () => {
     return MODELS.find(m => m.id === modelId);
   };
 
+  // Retry a whole failed message (when no images are present)
+  const handleRetryMessage = async (failedMessage: ChatMessage) => {
+    if (isGenerating) return;
+
+    // Find the session and previous user message
+    const session = sessions.find(s => s.messages.some(m => m.id === failedMessage.id));
+    if (!session) return;
+
+    const msgIndex = session.messages.findIndex(m => m.id === failedMessage.id);
+    if (msgIndex < 1) return; // Should have user message before
+
+    const userMessage = session.messages[msgIndex - 1];
+    if (userMessage.role !== 'user') return;
+
+    // Call handleGenerate with the previous prompt and session config
+    handleGenerate(userMessage.content, session.config);
+  };
+
   // Retry failed image generation
   const handleRetry = async (failedImage: GeneratedImage) => {
     if (isGenerating) return;
 
     setIsGenerating(true);
     toast.info("正在重新生成图像...");
+
+    // Update the image to loading state immediately
+    setSessions(currentSessions => {
+      const updatedSessions = currentSessions.map(s => {
+        if (s.id === currentSessionId) {
+          return {
+            ...s,
+            messages: s.messages.map(m => ({
+              ...m,
+              images: m.images?.map(img =>
+                img.id === failedImage.id ? { ...img, isLoading: true, error: undefined } : img
+              ),
+            })),
+          };
+        }
+        return s;
+      });
+      return updatedSessions;
+    });
 
     const enhancedPrompt = `${failedImage.prompt}（图像比例 ${failedImage.aspectRatio}）`;
 
@@ -1071,6 +1111,20 @@ const ImageGenerationPage: React.FC = () => {
                             <p className="text-sm font-medium text-red-700">图像生成失败</p>
                             <p className="text-xs text-red-500 mt-0.5">{message.content || "请重试"}</p>
                           </div>
+                          <Button
+                            onClick={() => handleRetryMessage(message)}
+                            disabled={isGenerating}
+                            variant="destructive"
+                            size="sm"
+                            className="h-8"
+                          >
+                            {isGenerating ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                            )}
+                            重试
+                          </Button>
                         </div>
                       ) : null}
 
