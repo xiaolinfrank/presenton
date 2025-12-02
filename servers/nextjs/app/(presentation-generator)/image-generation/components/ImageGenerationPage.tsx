@@ -1279,7 +1279,7 @@ const ImageGenerationPage: React.FC = () => {
                     模型选择
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {MODELS.map((model) => (
+                    {MODELS.filter(model => model.id !== "z-image").map((model) => (
                       <button
                         key={model.id}
                         onClick={() => handleConfigChange("model", model.id)}
