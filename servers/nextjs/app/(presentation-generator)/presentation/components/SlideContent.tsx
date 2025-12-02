@@ -226,7 +226,7 @@ const SlideContent = ({ slide, index, presentationId }: SlideContentProps) => {
                         placeholder="Enter your prompt here..."
                         className="w-full min-h-[100px] max-h-[100px] p-2 text-sm border rounded-lg focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                         disabled={isUpdating}
-                        onKeyDown={(e) => {
+                        onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
                             handleSubmit();
