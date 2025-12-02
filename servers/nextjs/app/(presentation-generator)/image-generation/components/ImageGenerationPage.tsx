@@ -533,7 +533,8 @@ const ImageGenerationPage: React.FC = () => {
           isLoading: false,
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+        let errorMessage = error instanceof Error ? error.message : "图像生成失败";
+        if (!errorMessage) errorMessage = "图像生成失败";
         console.error(`Image ${index + 1} generation error:`, errorMessage);
         return {
           id: `img-${Date.now()}-${index}`,
@@ -780,7 +781,8 @@ const ImageGenerationPage: React.FC = () => {
       });
       toast.success("图像重新生成成功");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+      let errorMessage = error instanceof Error ? error.message : "图像生成失败";
+      if (!errorMessage) errorMessage = "图像生成失败";
 
       // Update the image with the new error message to ensure retry button shows
       const updatedErrorImage: GeneratedImage = {
@@ -1032,7 +1034,7 @@ const ImageGenerationPage: React.FC = () => {
                                   <p className="text-sm">生成中...</p>
                                 </div>
                               </div>
-                            ) : image.error ? (
+                            ) : (image.error || !image.url) ? (
                               // Error state with retry button
                               <div
                                 key={image.id}
@@ -1043,7 +1045,7 @@ const ImageGenerationPage: React.FC = () => {
                                     <AlertCircle className="w-6 h-6 text-red-500" />
                                   </div>
                                   <p className="text-sm font-medium text-red-700 mb-1">生成失败</p>
-                                  <p className="text-xs text-red-500 line-clamp-2 mb-3 max-w-[90%]">{image.error}</p>
+                                  <p className="text-xs text-red-500 line-clamp-2 mb-3 max-w-[90%]">{image.error || "生成失败"}</p>
                                   <button
                                     onClick={() => handleRetry(image)}
                                     disabled={isGenerating}
