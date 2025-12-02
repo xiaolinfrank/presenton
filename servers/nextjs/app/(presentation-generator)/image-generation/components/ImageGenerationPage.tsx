@@ -1390,24 +1390,21 @@ const ImageGenerationPage: React.FC = () => {
                 <Settings2 className="w-5 h-5" />
               </button>
 
-              {/* Upload button - disabled for single-turn models like Z-Image */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={MODELS.find(m => m.id === config.model)?.singleTurnOnly}
-                className={cn(
-                  "p-2.5 rounded-lg transition-colors",
-                  MODELS.find(m => m.id === config.model)?.singleTurnOnly
-                    ? "bg-gray-100 text-gray-300 cursor-not-allowed"
-                    : referenceImages.length > 0
+              {/* Upload button - hidden for single-turn models like Z-Image */}
+              {!MODELS.find(m => m.id === config.model)?.singleTurnOnly && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "p-2.5 rounded-lg transition-colors",
+                    referenceImages.length > 0
                       ? "bg-violet-100 text-violet-600"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                )}
-                title={MODELS.find(m => m.id === config.model)?.singleTurnOnly
-                  ? "当前模型不支持参考图像"
-                  : "上传参考图像"}
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
+                  )}
+                  title="上传参考图像"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+              )}
 
               <div className="flex-1 relative">
                 <Textarea
