@@ -498,12 +498,13 @@ const ImageGenerationPage: React.FC = () => {
 
         if (!response.ok) {
           let errorMessage = "图像生成失败";
+          // Clone the response so we can try both json() and text()
+          const responseText = await response.text();
           try {
-            const errorData = await response.json();
+            const errorData = JSON.parse(responseText);
             errorMessage = errorData.detail || errorMessage;
           } catch {
-            const errorText = await response.text();
-            if (errorText) errorMessage = errorText;
+            if (responseText) errorMessage = responseText;
           }
           throw new Error(errorMessage);
         }
@@ -721,12 +722,13 @@ const ImageGenerationPage: React.FC = () => {
 
       if (!response.ok) {
         let errorMessage = "图像生成失败";
+        // Get response text first, then try to parse as JSON
+        const responseText = await response.text();
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.detail || errorMessage;
         } catch {
-          const errorText = await response.text();
-          if (errorText) errorMessage = errorText;
+          if (responseText) errorMessage = responseText;
         }
         throw new Error(errorMessage);
       }
@@ -779,6 +781,39 @@ const ImageGenerationPage: React.FC = () => {
       toast.success("图像重新生成成功");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "图像生成失败";
+
+      // Update the image with the new error message to ensure retry button shows
+      const updatedErrorImage: GeneratedImage = {
+        ...failedImage,
+        error: errorMessage,
+        createdAt: new Date().toISOString(),
+      };
+
+      setSessions(currentSessions => {
+        const updatedSessions = currentSessions.map(s => {
+          if (s.id === currentSessionId) {
+            return {
+              ...s,
+              messages: s.messages.map(m => ({
+                ...m,
+                images: m.images?.map(img =>
+                  img.id === failedImage.id ? updatedErrorImage : img
+                ),
+              })),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return s;
+        });
+
+        // Save to IndexedDB
+        imageSessionStorage.saveSessions(updatedSessions).catch(err => {
+          console.error("Failed to save sessions to IndexedDB:", err);
+        });
+
+        return updatedSessions;
+      });
+
       toast.error(`重试失败: ${errorMessage}`);
     } finally {
       setIsGenerating(false);
