@@ -68,22 +68,6 @@ const MODELS = [
     singleTurnOnly: false,
   },
   {
-    id: "dall-e-3",
-    name: "DALL-E 3",
-    description: "OpenAI 图像生成模型",
-    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
-    color: "from-green-400 to-teal-500",
-    singleTurnOnly: false,
-  },
-  {
-    id: "gpt-image-1",
-    name: "GPT Image 1",
-    description: "GPT 系列图像模型",
-    icon: "https://cdn.oaistatic.com/assets/favicon-o20kmmos.svg",
-    color: "from-blue-400 to-indigo-500",
-    singleTurnOnly: false,
-  },
-  {
     id: "z-image",
     name: "Z-Image",
     description: "通义万相图像生成（单轮对话）",
