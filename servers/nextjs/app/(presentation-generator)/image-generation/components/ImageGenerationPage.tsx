@@ -324,36 +324,11 @@ const ImageGenerationPage: React.FC = () => {
           role: "user",
           content: msg.content,
         });
-      } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
-        // For assistant messages with images, include ALL successful images
-        const successfulImages = msg.images.filter(img => img.url && !img.error);
-
-        if (successfulImages.length > 0) {
-          // Convert all successful images to base64
-          const imageContents: Array<{type: string; image_url: {url: string}}> = [];
-
-          for (const img of successfulImages) {
-            try {
-              const base64 = await imageUrlToBase64(img.url);
-              if (base64) {
-                imageContents.push({
-                  type: "image_url",
-                  image_url: { url: base64 }
-                });
-              }
-            } catch (error) {
-              // Skip this image if conversion fails
-            }
-          }
-
-          if (imageContents.length > 0) {
-            messages.push({
-              role: "assistant",
-              content: imageContents,
-            });
-          }
-        }
       }
+      // Note: We intentionally skip assistant messages with images to avoid
+      // "thought_signature" errors. The API expects images in assistant messages
+      // to have a thought_signature, which we don't have when re-sending generated images.
+      // For image generation context, user prompts are sufficient.
     }
 
     // Add the new user message with optional reference images
