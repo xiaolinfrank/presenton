@@ -324,11 +324,43 @@ const ImageGenerationPage: React.FC = () => {
           role: "user",
           content: msg.content,
         });
+      } else if (msg.role === "assistant" && msg.images && msg.images.length > 0) {
+        // For assistant messages with images, include successful images as USER role
+        // to avoid "thought_signature" errors. The API requires thought_signature for
+        // images in assistant messages, but not for user messages.
+        const successfulImages = msg.images.filter(img => img.url && !img.error);
+
+        if (successfulImages.length > 0) {
+          // Convert all successful images to base64 and send as user role
+          const imageContents: Array<{type: string; text?: string; image_url?: {url: string}}> = [];
+
+          for (const img of successfulImages) {
+            try {
+              const base64 = await imageUrlToBase64(img.url);
+              if (base64) {
+                imageContents.push({
+                  type: "image_url",
+                  image_url: { url: base64 }
+                });
+              }
+            } catch (error) {
+              // Skip this image if conversion fails
+            }
+          }
+
+          if (imageContents.length > 0) {
+            // Add a text description to indicate these are previously generated images
+            imageContents.push({
+              type: "text",
+              text: "[以上是之前生成的图片]"
+            });
+            messages.push({
+              role: "user",
+              content: imageContents,
+            });
+          }
+        }
       }
-      // Note: We intentionally skip assistant messages with images to avoid
-      // "thought_signature" errors. The API expects images in assistant messages
-      // to have a thought_signature, which we don't have when re-sending generated images.
-      // For image generation context, user prompts are sufficient.
     }
 
     // Add the new user message with optional reference images
